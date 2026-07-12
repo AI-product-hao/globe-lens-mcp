@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "globe-lens-mcp"
+version = "0.1.0"
+description = "MCP server that audits websites for SEO & internationalization readiness — built for AI coding agents and indie developers going global."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "David Chu" }]
+keywords = ["mcp", "seo", "i18n", "l10n", "hreflang", "openai", "claude", "cursor", "indie"]
+dependencies = [
+    "fastmcp>=2.0",
+    "httpx>=0.27",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+]
+
+[project.scripts]
+globe-lens-mcp = "globe_lens_mcp.server:main"
+
+[project.optional-dependencies]
+test = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/AI-product-hao/globe-lens-mcp"
+Repository = "https://github.com/AI-product-hao/globe-lens-mcp"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/globe_lens_mcp"]
