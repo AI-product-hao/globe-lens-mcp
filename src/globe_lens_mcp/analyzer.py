@@ -32,6 +32,9 @@ class AuditReport:
     html_lang: str | None = None
     charset: str | None = None
     viewport: bool = False
+    h1_count: int = 0
+    images_total: int = 0
+    images_missing_alt: int = 0
     canonical: str | None = None
     hreflang: list[dict[str, str]] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
@@ -138,6 +141,28 @@ def analyze_html(html: str, url: str) -> AuditReport:
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
+
+    # --- on-page structure: H1 ---
+    h1_tags = soup.find_all("h1")
+    report.h1_count = len(h1_tags)
+    if report.h1_count == 0:
+        report.issues.append(Issue("warning", "h1_missing",
+                                    "No <h1> heading found; each page should have one main heading."))
+    elif report.h1_count > 1:
+        report.issues.append(Issue("warning", "h1_multiple",
+                                    f"Found {report.h1_count} <h1> tags; use a single <h1> for clear document structure."))
+
+    # --- on-page media: image alt text ---
+    imgs = soup.find_all("img")
+    report.images_total = len(imgs)
+    report.images_missing_alt = sum(
+        1 for img in imgs if not (img.get("alt") and str(img.get("alt")).strip())
+    )
+    if report.images_total > 0 and report.images_missing_alt > 0:
+        report.issues.append(Issue(
+            "warning", "images_missing_alt",
+            f"{report.images_missing_alt} of {report.images_total} <img> tags missing alt text "
+            f"(hurts accessibility and image SEO)."))
 
     # --- score ---
     penalty = {"error": 20, "warning": 8, "info": 3}

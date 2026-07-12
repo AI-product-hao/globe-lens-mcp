@@ -37,3 +37,45 @@ def test_flags_missing_lang():
     codes = [i.code for i in r.issues]
     assert "lang_missing" in codes
     assert r.html_lang is None
+
+
+SAMPLE_STRUCTURE = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Structure Demo</title>
+</head>
+<body>
+  <h1>First heading</h1>
+  <h1>Second heading</h1>
+  <img src="/a.png">
+  <img src="/b.png" alt="">
+  <img src="/c.png" alt="ok">
+</body>
+</html>"""
+
+
+def test_flags_onpage_structure_issues():
+    r = analyze_html(SAMPLE_STRUCTURE, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "h1_multiple" in codes
+    assert r.h1_count == 2
+    assert r.images_total == 3
+    assert r.images_missing_alt == 2
+    assert "images_missing_alt" in codes
+
+
+SAMPLE_SINGLE_H1_NO_IMG = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Single H1</title></head>
+<body><h1>Main heading</h1><p>Just text</p></body></html>"""
+
+
+def test_clean_onpage_structure_has_no_structure_issues():
+    r = analyze_html(SAMPLE_SINGLE_H1_NO_IMG, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "h1_missing" not in codes
+    assert "h1_multiple" not in codes
+    assert "images_missing_alt" not in codes
+    assert r.h1_count == 1
+    assert r.images_total == 0
+    assert r.images_missing_alt == 0
