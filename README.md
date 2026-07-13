@@ -78,6 +78,21 @@ It calls `audit_url` and returns something like:
 }
 ```
 
+## Tool options
+
+Every tool accepts optional request controls — handy for staging/preview sites
+and for matching how real users or crawlers see your pages:
+
+| Param | Default | Use case |
+| --- | --- | --- |
+| `timeout` | `20` | Tighten/loosen the request timeout (seconds). |
+| `user_agent` | GlobeLens bot | Override the UA to mimic a browser or a specific crawler. |
+| `verify_ssl` | `true` | Set `false` to audit staging sites with self-signed certs. |
+
+```json
+{ "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
+```
+
 ## Develop
 
 ```bash

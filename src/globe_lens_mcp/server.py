@@ -15,17 +15,37 @@ mcp = FastMCP("GlobeLens")
 
 
 @mcp.tool()
-async def audit_url(url: str) -> dict:
+async def audit_url(
+    url: str,
+    timeout: int = 20,
+    user_agent: str | None = None,
+    verify_ssl: bool = True,
+) -> dict:
     """Audit a public URL for SEO & internationalization readiness.
 
     Checks title, meta description, html lang, hreflang alternates, OG/Twitter
-    cards, canonical, viewport, charset, plus robots.txt / sitemap.xml presence.
-    Returns a structured report with a 0-100 score and prioritized issues.
+    cards, canonical, viewport, charset, H1 structure, image alt coverage, plus
+    robots.txt / sitemap.xml presence. Returns a structured report with a 0-100
+    score and prioritized issues.
+
+    Args:
+        url: The page to audit.
+        timeout: Request timeout in seconds (default 20).
+        user_agent: Override the default User-Agent (e.g. to mimic a real
+            browser or a specific crawler).
+        verify_ssl: Set False to skip TLS verification (useful for staging
+            environments using self-signed certificates).
     """
     headers = {
-        "user-agent": "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
+        "user-agent": user_agent
+        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
     }
-    async with httpx.AsyncClient(follow_redirects=True, timeout=20, headers=headers) as client:
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=timeout,
+        headers=headers,
+        verify=verify_ssl,
+    ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         report = analyze_html(resp.text, url)
@@ -44,9 +64,30 @@ async def audit_url(url: str) -> dict:
 
 
 @mcp.tool()
-async def check_i18n(url: str) -> dict:
-    """Focused check of internationalization signals: html lang, hreflang alternates, x-default."""
-    async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
+async def check_i18n(
+    url: str,
+    timeout: int = 20,
+    user_agent: str | None = None,
+    verify_ssl: bool = True,
+) -> dict:
+    """Focused check of internationalization signals: html lang, hreflang alternates, x-default.
+
+    Args:
+        url: The page to check.
+        timeout: Request timeout in seconds (default 20).
+        user_agent: Override the default User-Agent.
+        verify_ssl: Set False to skip TLS verification (e.g. staging sites).
+    """
+    headers = {
+        "user-agent": user_agent
+        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
+    }
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=timeout,
+        headers=headers,
+        verify=verify_ssl,
+    ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
         report = analyze_html(resp.text, url)
@@ -62,9 +103,30 @@ async def check_i18n(url: str) -> dict:
 
 
 @mcp.tool()
-async def check_robots_sitemap(url: str) -> dict:
-    """Check whether a site exposes robots.txt and sitemap.xml."""
-    async with httpx.AsyncClient(follow_redirects=True, timeout=20) as client:
+async def check_robots_sitemap(
+    url: str,
+    timeout: int = 20,
+    user_agent: str | None = None,
+    verify_ssl: bool = True,
+) -> dict:
+    """Check whether a site exposes robots.txt and sitemap.xml.
+
+    Args:
+        url: The site (or any page on it) to check.
+        timeout: Request timeout in seconds (default 20).
+        user_agent: Override the default User-Agent.
+        verify_ssl: Set False to skip TLS verification (e.g. staging sites).
+    """
+    headers = {
+        "user-agent": user_agent
+        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
+    }
+    async with httpx.AsyncClient(
+        follow_redirects=True,
+        timeout=timeout,
+        headers=headers,
+        verify=verify_ssl,
+    ) as client:
         robots_url, sitemap_url = robots_sitemap_urls(url)
         out: dict[str, any] = {}
         try:
