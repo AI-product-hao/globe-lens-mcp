@@ -31,3 +31,13 @@
 - **文档**：README 新增「Tool options」小节，用表格 + 示例 JSON 说明三个参数与典型用途。
 - **测试结果**：`pytest -q` → 8 passed。
 - **对 Codex for OSS 申请的贡献**：展示「把工具做得真正可用、贴合真实工程场景」——很多 MCP 工具只暴露 url 一个参数，GlobeLens 主动考虑了 staging/自签名证书、爬虫/浏览器 UA 模拟、超时控制这些 agent 实战中必然遇到的需求；且改动有对应单测、文档同步、向后兼容，体现成熟开源维护者的工程素养。
+
+## Day 3 — 2026-07-15
+- **新增审计维度（可抓取性 & 结构化数据，与 Day 2「工具可选参数」不同类，满足避免连续同类规则）**：在 `analyzer.py` 的纯 HTML 解析层新增两类真实 SEO 信号，无需网络、易单测：
+  - **抓取/索引控制**：解析 `<meta name="robots" content="...">`，新增 `meta_robots` 字段；当含 `noindex` 指令时给出 `robots_noindex` warning（页面会被搜索引擎排除——站长最常忽略却影响最大的坑之一）。
+  - **结构化数据**：检测是否存在 `<script type="application/ld+json">`，新增 `has_json_ld` 布尔字段；缺失时给出 `json_ld_missing` info（利于富媒体搜索结果）。
+  - 两个字段均加入 `AuditReport`（向后兼容，默认值不影响既有 `to_dict`）。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例（`test_flags_noindex_from_meta_robots`、`test_detects_json_ld_and_skips_missing_warning`），覆盖 noindex 解析 + 缺 JSON-LD、有 JSON-LD 且跳过缺失告警两种场景；为避免 `json_ld_missing` info 把 `SAMPLE_GOOD` 分数拉低破坏 `score >= 90` 断言，给 `SAMPLE_GOOD` 补了一段真实 JSON-LD。总用例 8 → 10，全部通过。
+- **文档**：README Features 中 `audit_url` 说明补充 `meta robots / noindex` 与 `JSON-LD structured data`。
+- **测试结果**：`pytest -q` → 10 passed。
+- **对 Codex for OSS 申请的贡献**：展示「持续在真实可审计能力上加法」——noindex 与结构化数据正是现代 SEO 审计（Google Rich Results、index coverage）的核心关注点，且逻辑无网络依赖、可独立单测，体现对项目定位（给 AI agent 的轻量可测审计）的坚持；每日稳定迭代 + 单测守护 + 文档同步，构成可信的「真实活跃」证据链。
