@@ -23,6 +23,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   `sitemap.xml` presence. Returns a **0–100 score** and prioritized issues.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
+- 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
+  **absolute URLs** (so an agent can act on them directly), and empty / malformed
+  HTML returns a clear `empty_html` error instead of crashing.
 
 ## Install
 

@@ -112,3 +112,37 @@ def test_detects_json_ld_and_skips_missing_warning():
     # a normal indexable page carries no noindex warning
     assert "robots_noindex" not in codes
 
+
+SAMPLE_RELATIVE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Relative Links Demo</title>
+<link rel="canonical" href="/products/widget">
+<link rel="alternate" hreflang="en" href="/en">
+<link rel="alternate" hreflang="x-default" href="/">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_resolves_relative_canonical_and_hreflang():
+    page_url = "https://example.com/some/deep/page"
+    r = analyze_html(SAMPLE_RELATIVE, page_url)
+    # canonical is kept verbatim but also resolved to an absolute URL
+    assert r.canonical == "/products/widget"
+    assert r.canonical_url == "https://example.com/products/widget"
+    # every hreflang entry gets an absolute abs_href resolved against the page
+    assert len(r.hreflang) == 2
+    hrefs = {h["hreflang"]: h.get("abs_href") for h in r.hreflang}
+    assert hrefs["en"] == "https://example.com/en"
+    assert hrefs["x-default"] == "https://example.com/"
+
+
+def test_handles_empty_html_safely():
+    r = analyze_html("", "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "empty_html" in codes
+    assert r.score == 0
+    # raw input (None) should also be safe, not crash
+    r2 = analyze_html(None, "https://example.com")  # type: ignore[arg-type]
+    assert any(i.code == "empty_html" for i in r2.issues)
+    assert r2.score == 0
+
+

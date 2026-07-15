@@ -38,6 +38,7 @@ class AuditReport:
     meta_robots: str | None = None
     has_json_ld: bool = False
     canonical: str | None = None
+    canonical_url: str | None = None
     hreflang: list[dict[str, str]] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
     twitter_tags: dict[str, str] = field(default_factory=dict)
@@ -62,6 +63,17 @@ def _rel_values(tag) -> list[str]:
 def analyze_html(html: str, url: str) -> AuditReport:
     """Parse raw HTML and produce an SEO / i18n audit report."""
     report = AuditReport(url=url)
+
+    # Guard against degenerate input (None / empty / whitespace-only) so the
+    # analyzer never crashes on a bad upstream response and returns a clear,
+    # machine-readable signal instead.
+    if not html or not str(html).strip():
+        report.issues.append(Issue(
+            "error", "empty_html",
+            "Received empty or whitespace-only HTML; nothing to audit."))
+        report.score = 0
+        return report
+
     soup = BeautifulSoup(html, "html.parser")
 
     # --- <title> ---
@@ -117,9 +129,15 @@ def analyze_html(html: str, url: str) -> AuditReport:
     for link in soup.find_all("link"):
         rels = _rel_values(link)
         if "canonical" in rels and link.get("href"):
-            report.canonical = link.get("href")
+            href = link.get("href")
+            report.canonical = href
+            report.canonical_url = urljoin(url, href)
         if "alternate" in rels and link.get("hreflang"):
-            report.hreflang.append({"hreflang": link.get("hreflang"), "href": link.get("href")})
+            href = link.get("href")
+            entry = {"hreflang": link.get("hreflang"), "href": href}
+            if href:
+                entry["abs_href"] = urljoin(url, href)
+            report.hreflang.append(entry)
 
     for meta in soup.find_all("meta"):
         prop = meta.get("property") or meta.get("name")
