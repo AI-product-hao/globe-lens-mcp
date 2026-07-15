@@ -41,3 +41,13 @@
 - **文档**：README Features 中 `audit_url` 说明补充 `meta robots / noindex` 与 `JSON-LD structured data`。
 - **测试结果**：`pytest -q` → 10 passed。
 - **对 Codex for OSS 申请的贡献**：展示「持续在真实可审计能力上加法」——noindex 与结构化数据正是现代 SEO 审计（Google Rich Results、index coverage）的核心关注点，且逻辑无网络依赖、可独立单测，体现对项目定位（给 AI agent 的轻量可测审计）的坚持；每日稳定迭代 + 单测守护 + 文档同步，构成可信的「真实活跃」证据链。
+
+## Day 4 — 2026-07-15
+- **边界健壮性（与 Day 3「新增审计维度」不同类，满足避免连续同类规则）**：在 `analyzer.py` 的纯 HTML 解析层补两类真实工程边界处理，无需网络、易单测：
+  - **相对 URL 绝对化**：页面里的 `canonical` 与 `hreflang` 常写成相对路径（如 `/products`、`/en`）。新增 `canonical_url`（绝对地址，与原始 `canonical` 并存）+ 每个 hreflang 条目的 `abs_href` 字段，统一用 `urljoin(page_url, href)` 解析。AI agent 拿到即可直接用，不必再自己拼 URL——这是真实调用中最容易踩的坑。
+  - **空/异常输入安全**：`analyze_html` 现在对 `None` / 空串 / 纯空白输入直接返回 `empty_html` error（score 0），不再往下解析或意外崩溃；上游返回空响应时行为清晰可测。
+  - 两个字段/分支均向后兼容（默认值不影响既有 `to_dict`）。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例（`test_resolves_relative_canonical_and_hreflang`、`test_handles_empty_html_safely`），覆盖相对 canonical/hreflang 绝对化 + 空串/None 输入安全；总用例 10 → 12，全部通过。
+- **文档**：README Features 新增「Robust by design」一行，说明相对链接绝对化 + 空 HTML 安全。
+- **测试结果**：`pytest -q` → 12 passed。
+- **对 Codex for OSS 申请的贡献**：展示「把工具做得经得起真实输入」——很多审计类脚本遇到空响应或相对链接就崩/产出无效数据，GlobeLens 主动把边界处理掉并配单测守护；这正是一个成熟开源维护者会做的「质量而非功能堆叠」改进，配合前面几天的功能加法，形成完整证据链：既有新能力、又有工程严谨度。

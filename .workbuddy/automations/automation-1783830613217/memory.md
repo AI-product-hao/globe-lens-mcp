@@ -6,6 +6,8 @@
 - Day 0：项目初始化（仓库骨架、3 个 MCP 工具、2 个测试）。
 - Day 1：2026-07-12 完成（见下）。
 - Day 2：2026-07-13 完成（见下）。
+- Day 3：2026-07-15 完成（见下）。
+- Day 4：2026-07-15 完成（见下）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -21,9 +23,23 @@
 - Commit：5663d7c (feat) + eeac43e (docs/PROGRESS)。
 - 坑：初版测试 stub 内又调用被 patch 的 `httpx.AsyncClient` 导致 RecursionError；改为先捕获真实类 `REAL_CLIENT = httpx.AsyncClient` 再构造 MockTransport client 解决。
 
+## Day 3 — 2026-07-15
+- 改动类型：新增审计维度（可抓取性 & 结构化数据）。
+- 内容：analyzer.py 解析 `<meta name="robots">`（新增 `meta_robots` 字段，含 noindex 时 `robots_noindex` warning）+ 检测 `<script type="application/ld+json">`（新增 `has_json_ld` 字段，缺失时 `json_ld_missing` info）；新增 2 个测试（给 SAMPLE_GOOD 补 JSON-LD 以免分数破 `>=90`）；README Features 同步。
+- 测试：pytest -q → 10 passed（8→10）。
+- Commit：0c90923 (feat) + 6e1e84e (docs/PROGRESS)。
+- 注意：本次用 `.venv/Scripts/python.exe -m pytest` 跑（直接 `pytest` 在 Git Bash 下 PATH 未生效）。
+
+## Day 4 — 2026-07-15
+- 改动类型：边界健壮性（与 Day 3「新增审计维度」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 把相对 `canonical` / `hreflang` 链接用 `urljoin(page_url, href)` 解析为绝对地址（新增 `canonical_url` + 每条 hreflang 的 `abs_href`）；对 `None`/空/纯空白 HTML 直接返回 `empty_html` error（score 0），不崩溃；新增 2 个测试覆盖两类行为；README Features 加「Robust by design」。
+- 测试：pytest -q → 12 passed（10→12）。
+- Commit：81e4ec8 (feat) + 本次 docs 提交（PROGRESS Day 4 + 本 memory）。
+- 注意：保持相对 URL 时 `canonical` 仍保留原始值，仅并行提供绝对地址，向后兼容既有字段与单测。
+
 ## 后续计划（避免连续同类）
-- 已用类别：Day 1 = 新增审计维度；Day 2 = 工具可选参数。
-- Day 3 候选（不要是「工具可选参数」）：边界 bug（空 HTML / 非 UTF-8 / 相对 URL 解析 / 超大页面截断）、或新增另一个审计维度（broken internal links、meta robots=noindex、缺失 JSON-LD 结构化数据）、或补充单元测试、或改进 Issue 文案与严重级别、或 README 示例增强。
+- 已用类别：Day 1 = 新增审计维度；Day 2 = 工具可选参数；Day 3 = 新增审计维度（meta robots noindex + JSON-LD）；Day 4 = 边界健壮性（相对 URL 绝对化 + 空 HTML 安全）。
+- Day 5 候选（不要是「边界健壮性」；若想避免连续两天「新增审计维度」则可优先非审计维度类）：工具可选参数已做过、边界健壮性已做过——优先从「补充单元测试覆盖新逻辑 / 改进 Issue 文案与严重级别 / README 示例增强 / 非 UTF-8 解码健壮性（server 层 resp.content 安全解码）/ 超大页面截断（server 层 max_size 上限）」中选；若选新审计维度，需避开已覆盖项（H1、img alt、meta robots、JSON-LD、hreflang、canonical、OG/Twitter、charset、viewport、title、desc、lang）。
 - 当 PROGRESS.md 出现 Day 1..Day 7（K=7）时，额外生成 SUMMARY.md。
 
 ## 环境
