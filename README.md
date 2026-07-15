@@ -18,7 +18,8 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
 
 - 🔍 **Full audit** (`audit_url`): title, meta description, `lang`, `hreflang`,
   canonical, viewport, charset, Open Graph / Twitter cards, **H1 structure**
-  (missing / multiple), **image `alt` text coverage**, plus `robots.txt` /
+  (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
+  crawl control, **JSON-LD structured data** presence, plus `robots.txt` /
   `sitemap.xml` presence. Returns a **0–100 score** and prioritized issues.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.

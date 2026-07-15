@@ -12,6 +12,7 @@ SAMPLE_GOOD = """<!doctype html>
   <link rel="alternate" hreflang="x-default" href="https://example.com/">
   <meta property="og:title" content="Example">
   <meta property="og:description" content="desc">
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>
 </head>
 <body><h1>Hi</h1></body>
 </html>"""
@@ -79,3 +80,35 @@ def test_clean_onpage_structure_has_no_structure_issues():
     assert r.h1_count == 1
     assert r.images_total == 0
     assert r.images_missing_alt == 0
+
+
+SAMPLE_CRAWL = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Crawl Control Demo</title>
+<meta name="robots" content="noindex, nofollow">
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_STRUCTURED = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Structured Data Demo</title>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"Article"}</script>
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_noindex_from_meta_robots():
+    r = analyze_html(SAMPLE_CRAWL, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "robots_noindex" in codes
+    assert r.meta_robots == "noindex, nofollow"
+    assert r.has_json_ld is False
+    assert "json_ld_missing" in codes
+
+
+def test_detects_json_ld_and_skips_missing_warning():
+    r = analyze_html(SAMPLE_STRUCTURED, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert r.has_json_ld is True
+    assert "json_ld_missing" not in codes
+    # a normal indexable page carries no noindex warning
+    assert "robots_noindex" not in codes
+

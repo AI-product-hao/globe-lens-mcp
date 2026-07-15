@@ -35,6 +35,8 @@ class AuditReport:
     h1_count: int = 0
     images_total: int = 0
     images_missing_alt: int = 0
+    meta_robots: str | None = None
+    has_json_ld: bool = False
     canonical: str | None = None
     hreflang: list[dict[str, str]] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
@@ -141,6 +143,22 @@ def analyze_html(html: str, url: str) -> AuditReport:
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
+
+    # --- crawl / index control: meta robots ---
+    meta_robots = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "robots"})
+    if meta_robots and meta_robots.get("content") and meta_robots["content"].strip():
+        report.meta_robots = meta_robots["content"].strip()
+        directives = [d.strip().lower() for d in report.meta_robots.split(",")]
+        if "noindex" in directives:
+            report.issues.append(Issue("warning", "robots_noindex",
+                                       "Page is marked noindex; search engines will exclude it from results."))
+
+    # --- structured data: JSON-LD ---
+    json_ld = soup.find_all("script", attrs={"type": "application/ld+json"})
+    report.has_json_ld = len(json_ld) > 0
+    if not report.has_json_ld:
+        report.issues.append(Issue("info", "json_ld_missing",
+                                   "No JSON-LD structured data found; add schema.org markup for rich results."))
 
     # --- on-page structure: H1 ---
     h1_tags = soup.find_all("h1")
