@@ -51,3 +51,13 @@
 - **文档**：README Features 新增「Robust by design」一行，说明相对链接绝对化 + 空 HTML 安全。
 - **测试结果**：`pytest -q` → 12 passed。
 - **对 Codex for OSS 申请的贡献**：展示「把工具做得经得起真实输入」——很多审计类脚本遇到空响应或相对链接就崩/产出无效数据，GlobeLens 主动把边界处理掉并配单测守护；这正是一个成熟开源维护者会做的「质量而非功能堆叠」改进，配合前面几天的功能加法，形成完整证据链：既有新能力、又有工程严谨度。
+
+## Day 5 — 2026-07-16
+- **新增审计维度（混合内容检测，与 Day 4「边界健壮性」不同类，满足避免连续同类规则）**：在 `analyzer.py` 的纯 HTML 解析层新增一类真实可用、且常被忽略的 SEO/安全信号——**混合内容（mixed content）**：
+  - 当被审计页面本身以 HTTPS 提供时，扫描 `img` / `script` / `link` / `iframe` / `source` / `audio` / `video` / `embed` 中所有以明文 `http://` 加载的子资源，逐一记录其 `tag` / `attr` / `url`，并给出 `mixed_content` warning。AI agent 拿到即可直接定位并改成 https 或相对路径——现代浏览器会直接拦截这些资源，导致页面残缺，是上线最常见的「本地好端端的，一上线就坏」元凶之一。
+  - 关键正确性：相对路径（`/style.css`）与协议相对路径（`//cdn/x.js`）在 HTTPS 页面下会继承 HTTPS，**不算**混合内容；`http://` 页面自身加载 `http://` 子资源也不算混合内容（无需「升级」）。这两类场景都做了反例断言，避免误报。
+  - 新增字段 `mixed_content`（向后兼容，默认空列表，不影响既有 `to_dict`）。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例（`test_flags_mixed_content_on_https_page`、`test_no_mixed_content_for_relative_or_http_page`），覆盖 HTTPS 页面命中 3 个明文子资源 + 每条记录 tag/attr 正确、以及相对/https 资源与 http:// 页面均不误报两种场景；总用例 12 → 14，全部通过。
+- **文档**：README Features 中 `audit_url` 说明补充 **mixed-content detection**。
+- **测试结果**：`pytest -q` → 14 passed。
+- **对 Codex for OSS 申请的贡献**：展示「持续往真实可审计能力上加法，且每个信号都带正确性与反例守护」——混合内容是 Google Search Console 与 Lighthouse 都重点提示的维度，GlobeLens 以零网络依赖、可独立单测的方式把它纳入，并刻意处理了「什么是/不是混合内容」的边界，避免给 agent 喂误报。再叠加前几天：新维度 ×4、工具参数化、工程健壮性，完整证据链越来越厚，且每步都可测、文档同步、向后兼容——正是评审想看到的「真实活跃 + 真实使用场景」。

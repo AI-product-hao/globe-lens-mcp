@@ -8,6 +8,7 @@
 - Day 2：2026-07-13 完成（见下）。
 - Day 3：2026-07-15 完成（见下）。
 - Day 4：2026-07-15 完成（见下）。
+- Day 5：2026-07-16 完成（见下）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -41,6 +42,13 @@
 - 已用类别：Day 1 = 新增审计维度；Day 2 = 工具可选参数；Day 3 = 新增审计维度（meta robots noindex + JSON-LD）；Day 4 = 边界健壮性（相对 URL 绝对化 + 空 HTML 安全）。
 - Day 5 候选（不要是「边界健壮性」；若想避免连续两天「新增审计维度」则可优先非审计维度类）：工具可选参数已做过、边界健壮性已做过——优先从「补充单元测试覆盖新逻辑 / 改进 Issue 文案与严重级别 / README 示例增强 / 非 UTF-8 解码健壮性（server 层 resp.content 安全解码）/ 超大页面截断（server 层 max_size 上限）」中选；若选新审计维度，需避开已覆盖项（H1、img alt、meta robots、JSON-LD、hreflang、canonical、OG/Twitter、charset、viewport、title、desc、lang）。
 - 当 PROGRESS.md 出现 Day 1..Day 7（K=7）时，额外生成 SUMMARY.md。
+
+## Day 5 — 2026-07-16
+- 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 在 HTTPS 页面下扫描 img/script/link/iframe/source/audio/video/embed 的明文 http:// 子资源，记入 `mixed_content` 字段并给 `mixed_content` warning（含每条 tag/attr/url）；相对/协议相对 URL 与 http:// 页面均不误报；新增 2 个测试；README Features 同步。
+- 测试：pytest -q → 14 passed（12→14）。
+- Commit：662610d (feat) + 本次 docs 提交（PROGRESS Day 5 + 本 memory）。
+- 下一步候选（Day 6，避开「新增审计维度」以保多样性，可选：补充单元测试覆盖新逻辑 / 改进 Issue 文案与严重级别 / README 示例增强 / server 层非 UTF-8 安全解码 / 超大页面截断）。
 
 ## 环境
 - 本地 venv 已建（.venv），pytest 可用；git 身份已配置（David Chu <dev@globelens.local>）。
