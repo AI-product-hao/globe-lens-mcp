@@ -35,6 +35,7 @@ class AuditReport:
     h1_count: int = 0
     images_total: int = 0
     images_missing_alt: int = 0
+    mixed_content: list[dict[str, str]] = field(default_factory=list)
     meta_robots: str | None = None
     has_json_ld: bool = False
     canonical: str | None = None
@@ -199,6 +200,30 @@ def analyze_html(html: str, url: str) -> AuditReport:
             "warning", "images_missing_alt",
             f"{report.images_missing_alt} of {report.images_total} <img> tags missing alt text "
             f"(hurts accessibility and image SEO)."))
+
+    # --- insecure subresources: mixed content on HTTPS pages ---
+    # Browsers block/flag plaintext HTTP resources loaded from an HTTPS page;
+    # these silently break rendering and erode user trust / SEO. Only flag when
+    # the page itself is served over HTTPS (relative and protocol-relative URLs
+    # such as "/x.png" or "//x.png" inherit HTTPS and are NOT mixed content).
+    if urlparse(url).scheme == "https":
+        for tag in soup.find_all(
+            ["img", "script", "link", "iframe", "source", "audio", "video", "embed"]
+        ):
+            attr = "href" if tag.name == "link" else "src"
+            val = tag.get(attr)
+            if not isinstance(val, str):
+                continue
+            val = val.strip()
+            if val.lower().startswith("http://"):
+                report.mixed_content.append(
+                    {"tag": tag.name, "attr": attr, "url": val}
+                )
+        if report.mixed_content:
+            report.issues.append(Issue(
+                "warning", "mixed_content",
+                f"Found {len(report.mixed_content)} insecure HTTP subresource(s) on an "
+                f"HTTPS page; browsers may block them and they hurt trust/SEO."))
 
     # --- score ---
     penalty = {"error": 20, "warning": 8, "info": 3}

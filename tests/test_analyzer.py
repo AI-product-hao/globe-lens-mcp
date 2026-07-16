@@ -146,3 +146,43 @@ def test_handles_empty_html_safely():
     assert r2.score == 0
 
 
+SAMPLE_MIXED = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Mixed Content Demo</title>
+<link rel="stylesheet" href="http://cdn.example.com/style.css">
+</head><body>
+<h1>Hi</h1>
+<img src="http://cdn.example.com/a.png" alt="ok">
+<script src="http://cdn.example.com/app.js"></script>
+</body></html>"""
+
+
+def test_flags_mixed_content_on_https_page():
+    r = analyze_html(SAMPLE_MIXED, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "mixed_content" in codes
+    # three insecure http:// subresources: link + img + script
+    assert len(r.mixed_content) == 3
+    tags = {m["tag"] for m in r.mixed_content}
+    assert {"link", "img", "script"} <= tags
+    # each entry records where to fix
+    assert all(m["attr"] in ("href", "src") for m in r.mixed_content)
+
+
+def test_no_mixed_content_for_relative_or_http_page():
+    # relative + https resources on an https page are NOT mixed content
+    https_ok = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8"><title>ok</title>'
+        '<link rel="stylesheet" href="/style.css"></head>'
+        '<body><h1>Hi</h1><img src="https://cdn.example.com/a.png" alt="ok"></body></html>',
+        "https://example.com",
+    )
+    assert https_ok.mixed_content == []
+    assert "mixed_content" not in [i.code for i in https_ok.issues]
+
+    # an http:// page loading http:// resources is not "mixed" (no upgrade needed)
+    http_page = analyze_html(SAMPLE_MIXED, "http://example.com")
+    assert http_page.mixed_content == []
+    assert "mixed_content" not in [i.code for i in http_page.issues]
+
+
