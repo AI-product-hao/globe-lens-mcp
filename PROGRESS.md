@@ -61,3 +61,13 @@
 - **文档**：README Features 中 `audit_url` 说明补充 **mixed-content detection**。
 - **测试结果**：`pytest -q` → 14 passed。
 - **对 Codex for OSS 申请的贡献**：展示「持续往真实可审计能力上加法，且每个信号都带正确性与反例守护」——混合内容是 Google Search Console 与 Lighthouse 都重点提示的维度，GlobeLens 以零网络依赖、可独立单测的方式把它纳入，并刻意处理了「什么是/不是混合内容」的边界，避免给 agent 喂误报。再叠加前几天：新维度 ×4、工具参数化、工程健壮性，完整证据链越来越厚，且每步都可测、文档同步、向后兼容——正是评审想看到的「真实活跃 + 真实使用场景」。
+
+## Day 6 — 2026-07-17
+- **边界健壮性（取网络层，与 Day 5「新增审计维度」不同类，满足避免连续同类规则）**：让工具能扛住真实世界里最常见的两类脏输入——错误的字符编码与超大页面：
+  - **安全解码任何编码**：新增 `server._decode_response(resp)`，优先使用响应的 `Content-Type` 声明的编码，回退到 UTF-8；解码用 `errors="replace"`，遇到未知/错误编码也不会让 agent 崩溃（避免给非英文站点审计时整段乱码或抛 `UnicodeDecodeError`）。这是真实使用场景的核心——大量真实页面（尤其非英语、GBK/Big5 等）编码不规范。
+  - **超大页面截断**：新增 `MAX_HTML_BYTES = 2 MiB` 上限，超过则截断后再解析，并通过 `analyze_html(..., truncated=True)` 追加一条 `page_truncated` info 告警，让 agent 知道结果是「部分审计」。避免一次性把几 MB 的 SPA/内联数据灌进解析器与上下文窗口，保持快且可控。
+  - `audit_url` 与 `check_i18n` 都改用安全解码器；`check_i18n` 额外在返回里暴露 `truncated` 布尔。改动向后兼容（`analyze_html` 的新参数有默认值，既有调用与单测不受影响）。
+- **测试**：`tests/test_analyzer.py` 新增 `test_flags_page_truncated`（截断标记 → `page_truncated` 告警）；`tests/test_server.py` 新增 3 个用例——`test_audit_url_decodes_non_ascii_content`（UTF-8 多字节「Café / ñ」正确还原，证明非英文站点可审计）、`test_audit_url_truncates_oversized_page`（>2MiB 体被截断并标记）、`test_check_i18n_reports_truncation_flag`（截断标志透传）。总用例 14 → 18，全部通过。注：初版测试断言误把正文小写 `ñ` 写成大写 `Ñ` 导致失败，已修正为小写——解码本身工作正常。
+- **文档**：README「Robust by design」一节补充「安全解码任何字符集 + 超大页面截断（page_truncated 标记）」。
+- **测试结果**：`pytest -q` → 18 passed。
+- **对 Codex for OSS 申请的贡献**：展示「把工具做得经得起真实流量」——前面 Days 1–5 在「能审计什么」上加法，Day 6 回到「工程可靠性」：真实网站不会乖乖返回干净 UTF-8 小页面，GlobeLens 主动把编码与体积两类生产环境最常见的坑处理掉，且每一项都有网络层/解析层双重单测守护。配合前面：新维度 ×4 + 工具参数化 + 两层健壮性，证据链覆盖「功能广度 × 工程严谨度 × 真实场景」，且每步可测、文档同步、向后兼容——这正是评审最想看到的「真实活跃 + 真实使用场景」。下一步（Day 7，待 K 到 7）：可再做一类不同改进（如 Issue 文案/严重级别打磨、README 真实示例增强，或新的解析层边界），并额外生成 SUMMARY.md 汇总 7 天成果与申请素材。
