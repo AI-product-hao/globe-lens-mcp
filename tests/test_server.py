@@ -107,3 +107,67 @@ def test_check_robots_sitemap_forwards_verify_ssl_false():
     assert captured["kwargs"]["verify"] is False
     assert result["robots_txt"]["found"] is False
     assert result["sitemap_xml"]["found"] is False
+
+
+def test_audit_url_decodes_non_ascii_content():
+    # Real-world (non-English) pages are full of multi-byte UTF-8; the body is
+    # returned as raw bytes, so decoding must not mangle accents.
+    body = (
+        '<!doctype html><html lang="es"><head><meta charset="utf-8">'
+        "<title>Café y Niño — Añadir</title></head>"
+        "<body><h1>Hola</h1></body></html>"
+    ).encode("utf-8")
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com"))
+
+    assert result["html_lang"] == "es"
+    assert "Café" in result["title"]
+    assert "ñ" in result["title"]
+
+
+def test_audit_url_truncates_oversized_page():
+    # A body larger than MAX_HTML_BYTES must be truncated (and flagged) instead
+    # of blowing up the parser or the agent's context window.
+    chunk = (
+        b'<html lang="en"><head><meta charset="utf-8">'
+        b"<title>Big</title></head><body><h1>x</h1></body></html>"
+    )
+    big = chunk * (2 * 1024 * 1024 // len(chunk) + 50)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=big)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com"))
+
+    codes = [i["code"] for i in result["issues"]]
+    assert "page_truncated" in codes
+
+
+def test_check_i18n_reports_truncation_flag():
+    chunk = (
+        b'<html lang="en"><head><meta charset="utf-8">'
+        b"<title>Big</title></head><body><h1>x</h1></body></html>"
+    )
+    big = chunk * (2 * 1024 * 1024 // len(chunk) + 50)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=big)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com"))
+
+    assert result["truncated"] is True

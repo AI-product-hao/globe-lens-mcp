@@ -13,6 +13,32 @@ from .analyzer import analyze_html, robots_sitemap_urls
 
 mcp = FastMCP("GlobeLens")
 
+# Cap the HTML we feed to the parser. Real-world pages can be many MBs (heavy
+# SPAs, inlined data); auditing that much is slow and rarely useful, so we
+# truncate and tell the agent the result is partial.
+MAX_HTML_BYTES = 2 * 1024 * 1024
+
+
+def _decode_response(resp: httpx.Response) -> tuple[str, bool]:
+    """Decode a response body to text safely and report if it was truncated.
+
+    - Respects the response encoding (from Content-Type), falling back to UTF-8.
+    - Never raises on a bad/unknown encoding: undecodable bytes become U+FFFD.
+    - Truncates oversized bodies so the analyzer stays fast and bounded.
+    """
+    content = resp.content
+    truncated = False
+    if len(content) > MAX_HTML_BYTES:
+        content = content[:MAX_HTML_BYTES]
+        truncated = True
+    encoding = resp.encoding or "utf-8"
+    try:
+        text = content.decode(encoding, errors="replace")
+    except (LookupError, UnicodeDecodeError):
+        text = content.decode("utf-8", errors="replace")
+    return text, truncated
+
+
 
 @mcp.tool()
 async def audit_url(
@@ -48,7 +74,8 @@ async def audit_url(
     ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
-        report = analyze_html(resp.text, url)
+        text, truncated = _decode_response(resp)
+        report = analyze_html(text, url, truncated=truncated)
         robots_url, sitemap_url = robots_sitemap_urls(url)
         try:
             r = await client.get(robots_url)
@@ -90,7 +117,8 @@ async def check_i18n(
     ) as client:
         resp = await client.get(url)
         resp.raise_for_status()
-        report = analyze_html(resp.text, url)
+        text, truncated = _decode_response(resp)
+        report = analyze_html(text, url, truncated=truncated)
         issues = [asdict(i) for i in report.issues
                   if i.code.startswith("hreflang") or i.code == "lang_missing"]
         return {
@@ -99,6 +127,7 @@ async def check_i18n(
             "hreflang": report.hreflang,
             "issues": issues,
             "score": report.score,
+            "truncated": truncated,
         }
 
 

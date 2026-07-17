@@ -61,8 +61,16 @@ def _rel_values(tag) -> list[str]:
     return [r.lower() for r in rel]
 
 
-def analyze_html(html: str, url: str) -> AuditReport:
-    """Parse raw HTML and produce an SEO / i18n audit report."""
+def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
+    """Parse raw HTML and produce an SEO / i18n audit report.
+
+    Args:
+        html: The page HTML (decoded text).
+        url: The page URL (used to resolve relative links).
+        truncated: Set True when the HTML was cut off before analysis (e.g.
+            an oversized page). Adds a `page_truncated` info issue so the agent
+            knows the result may be incomplete.
+    """
     report = AuditReport(url=url)
 
     # Guard against degenerate input (None / empty / whitespace-only) so the
@@ -224,6 +232,13 @@ def analyze_html(html: str, url: str) -> AuditReport:
                 "warning", "mixed_content",
                 f"Found {len(report.mixed_content)} insecure HTTP subresource(s) on an "
                 f"HTTPS page; browsers may block them and they hurt trust/SEO."))
+
+    # --- partial-input signal: the page was truncated before analysis ---
+    if truncated:
+        report.issues.append(Issue(
+            "info", "page_truncated",
+            "Page exceeded the size limit and was truncated before analysis; "
+            "results may be incomplete."))
 
     # --- score ---
     penalty = {"error": 20, "warning": 8, "info": 3}

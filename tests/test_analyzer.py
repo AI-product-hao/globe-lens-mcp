@@ -186,3 +186,9 @@ def test_no_mixed_content_for_relative_or_http_page():
     assert "mixed_content" not in [i.code for i in http_page.issues]
 
 
+def test_flags_page_truncated():
+    r = analyze_html(SAMPLE_GOOD, "https://example.com", truncated=True)
+    codes = [i.code for i in r.issues]
+    assert "page_truncated" in codes
+
+

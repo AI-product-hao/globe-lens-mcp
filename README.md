@@ -26,7 +26,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
   **absolute URLs** (so an agent can act on them directly), and empty / malformed
-  HTML returns a clear `empty_html` error instead of crashing.
+  HTML returns a clear `empty_html` error instead of crashing. GlobeLens also
+  decodes **any charset safely** (mis-encoded pages never crash the agent) and
+  **truncates oversized pages**, flagging them via a `page_truncated` info issue so
+  audits stay fast and bounded.
 
 ## Install
 
