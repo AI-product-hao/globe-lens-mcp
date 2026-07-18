@@ -9,6 +9,7 @@
 - Day 3：2026-07-15 完成（见下）。
 - Day 4：2026-07-15 完成（见下）。
 - Day 5：2026-07-16 完成（见下）。
+- Day 6：2026-07-17 完成（见下）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -39,9 +40,16 @@
 - 注意：保持相对 URL 时 `canonical` 仍保留原始值，仅并行提供绝对地址，向后兼容既有字段与单测。
 
 ## 后续计划（避免连续同类）
-- 已用类别：Day 1 = 新增审计维度；Day 2 = 工具可选参数；Day 3 = 新增审计维度（meta robots noindex + JSON-LD）；Day 4 = 边界健壮性（相对 URL 绝对化 + 空 HTML 安全）。
-- Day 5 候选（不要是「边界健壮性」；若想避免连续两天「新增审计维度」则可优先非审计维度类）：工具可选参数已做过、边界健壮性已做过——优先从「补充单元测试覆盖新逻辑 / 改进 Issue 文案与严重级别 / README 示例增强 / 非 UTF-8 解码健壮性（server 层 resp.content 安全解码）/ 超大页面截断（server 层 max_size 上限）」中选；若选新审计维度，需避开已覆盖项（H1、img alt、meta robots、JSON-LD、hreflang、canonical、OG/Twitter、charset、viewport、title、desc、lang）。
-- 当 PROGRESS.md 出现 Day 1..Day 7（K=7）时，额外生成 SUMMARY.md。
+- 已用类别：Day 1 = 新增审计维度；Day 2 = 工具可选参数；Day 3 = 新增审计维度（meta robots noindex + JSON-LD）；Day 4 = 边界健壮性（相对 URL 绝对化 + 空 HTML 安全）；Day 5 = 新增审计维度（mixed content）；Day 6 = 边界健壮性（网络层：安全解码任意编码 + 超大页面截断）。
+- Day 7 候选（K=7，触发 SUMMARY.md；避开「边界健壮性」与「新增审计维度」以保多样性）：从「改进 Issue 文案与严重级别 / README 真实示例增强 / 补充单元测试覆盖新逻辑（如 robots_sitemap_urls、twitter 卡片、charset 分支）/ 解析层新边界（非 UTF-8 的 HTML 内 <meta charset> 二次校准、超大标签数量上限）」中选。若选新审计维度需避开已覆盖项（H1、img alt、meta robots、JSON-LD、hreflang、canonical、OG/Twitter、charset、viewport、title、desc、lang、mixed content）。
+- 当 PROGRESS.md 出现 Day 1..Day 7（K=7）时，额外生成 SUMMARY.md（汇总 7 天改动、功能/工具清单、申请素材、明确「star 增长依赖主动分发」+ X/Reddit/即刻 文案草稿）。
+
+## Day 6 — 2026-07-17
+- 改动类型：边界健壮性（网络层；与 Day 5「新增审计维度」不同类，满足避免连续同类规则）。
+- 内容：server.py 新增 `_decode_response(resp)` —— 优先用响应 Content-Type 编码、回退 UTF-8、`errors="replace"` 永不崩溃；`MAX_HTML_BYTES=2MiB` 截断超大页面；`analyze_html` 增加 `truncated` 参数并追加 `page_truncated` info；audit_url/check_i18n 改用安全解码，check_i18n 返回 `truncated` 标志；README Robust 小节同步。
+- 测试：pytest → 18 passed（14→18）；新增 analyze 层 1 例 + server 层 3 例（非 ASCII 解码还原、超大截断、check_i18n 截断标志透传）。
+- Commit：4eb2bee (feat) + 178f0a0 (docs/PROGRESS)。注意：feat 初版 commit message 误用反引号被 bash 命令替换吃掉 `truncated/page_truncated` 两词，已 `git commit --amend` 修正为无反引号版本（本地未推送，安全）。
+- 下一步（Day 7）：做一类与 Day 6 不同类的改进并生成 SUMMARY.md。
 
 ## Day 5 — 2026-07-16
 - 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。

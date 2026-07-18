@@ -12,14 +12,35 @@ from urllib.parse import urljoin, urlparse
 from bs4 import BeautifulSoup
 
 
+# Rank used to order issues by importance. Higher = more urgent. This is the
+# single source of truth for both the per-issue `priority` field and the global
+# sort, so the two can never drift apart.
+SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
+
+
 @dataclass
 class Issue:
     severity: str  # "error" | "warning" | "info"
     code: str
     message: str
+    # Machine-sortable importance derived from `severity`. Added incrementally
+    # (defaults to 0) so callers can trust the highest-priority item first.
+    priority: int = 0
+
+    def __post_init__(self) -> None:
+        if self.priority == 0:
+            self.priority = SEVERITY_RANK.get(self.severity, 0)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def sort_issues(issues: list[Issue]) -> list[Issue]:
+    """Order issues by severity (most urgent first), then by code for stable,
+    deterministic output so a caller can always trust `issues[0]` is the
+    highest-priority fix to make.
+    """
+    return sorted(issues, key=lambda i: (-i.priority, i.code))
 
 
 @dataclass
@@ -81,6 +102,7 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             "error", "empty_html",
             "Received empty or whitespace-only HTML; nothing to audit."))
         report.score = 0
+        report.issues = sort_issues(report.issues)
         return report
 
     soup = BeautifulSoup(html, "html.parser")
@@ -246,6 +268,9 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     for issue in report.issues:
         score -= penalty.get(issue.severity, 5)
     report.score = max(0, min(100, score))
+    # Return issues ordered by severity so callers (and AI agents) see the
+    # highest-priority fixes first — the tool's "prioritized issues" promise.
+    report.issues = sort_issues(report.issues)
     return report
 
 

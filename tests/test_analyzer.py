@@ -192,3 +192,27 @@ def test_flags_page_truncated():
     assert "page_truncated" in codes
 
 
+# A page that triggers all three severity tiers at once: a missing <html lang>
+# (error), a missing viewport (warning), and no hreflang / OG / JSON-LD (info).
+SAMPLE_PRIORITIZED = """<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Hi</title></head><body><h1>Hi</h1></body></html>"""
+
+
+def test_issues_sorted_by_severity_most_severe_first():
+    r = analyze_html(SAMPLE_PRIORITIZED, "https://example.com")
+    priorities = [i.priority for i in r.issues]
+    # highest-priority (largest) issues come first, strictly descending
+    assert priorities == sorted(priorities, reverse=True)
+    assert r.issues[0].severity == "error"
+    assert r.issues[-1].severity == "info"
+
+
+def test_issue_priority_matches_severity_rank():
+    from globe_lens_mcp.analyzer import SEVERITY_RANK
+
+    r = analyze_html(SAMPLE_PRIORITIZED, "https://example.com")
+    for issue in r.issues:
+        assert issue.priority == SEVERITY_RANK[issue.severity]
+
+

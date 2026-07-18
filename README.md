@@ -21,7 +21,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**
   (insecure `http://` subresources on HTTPS pages), plus `robots.txt` /
-  `sitemap.xml` presence. Returns a **0–100 score** and prioritized issues.
+  `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
+  severity** — each issue carries a numeric `priority` field (`error` > `warning`
+  > `info`), so the agent can act on the most urgent fix first.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
@@ -80,7 +82,7 @@ It calls `audit_url` and returns something like:
   "html_lang": "en",
   "score": 78,
   "issues": [
-    { "severity": "warning", "code": "hreflang_no_default",
+    { "severity": "warning", "code": "hreflang_no_default", "priority": 2,
       "message": "No x-default hreflang; recommended for international sites." }
   ]
 }
