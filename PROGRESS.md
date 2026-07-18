@@ -71,3 +71,14 @@
 - **文档**：README「Robust by design」一节补充「安全解码任何字符集 + 超大页面截断（page_truncated 标记）」。
 - **测试结果**：`pytest -q` → 18 passed。
 - **对 Codex for OSS 申请的贡献**：展示「把工具做得经得起真实流量」——前面 Days 1–5 在「能审计什么」上加法，Day 6 回到「工程可靠性」：真实网站不会乖乖返回干净 UTF-8 小页面，GlobeLens 主动把编码与体积两类生产环境最常见的坑处理掉，且每一项都有网络层/解析层双重单测守护。配合前面：新维度 ×4 + 工具参数化 + 两层健壮性，证据链覆盖「功能广度 × 工程严谨度 × 真实场景」，且每步可测、文档同步、向后兼容——这正是评审最想看到的「真实活跃 + 真实使用场景」。下一步（Day 7，待 K 到 7）：可再做一类不同改进（如 Issue 文案/严重级别打磨、README 真实示例增强，或新的解析层边界），并额外生成 SUMMARY.md 汇总 7 天成果与申请素材。
+
+## Day 7 — 2026-07-18（收官日，K=7）
+- **优化 Issue 严重级别与排序（与 Day 5「新增审计维度」、Day 6「边界健壮性」均不同类，满足避免连续同类规则）**：此前 `audit_url` 文档声称返回「prioritized issues」，但实际按 HTML 解析顺序追加，从未真正排序。本次把「按严重度优先」做成真实能力：
+  - `analyzer.py` 新增模块级 `SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}`（严重度单一事实来源，与 `Issue.priority` 永不失同步）；
+  - `Issue` 新增 `priority: int` 字段，`__post_init__` 据 `severity` 自动推导，对 `to_dict()` 是纯增量、向后兼容；
+  - 新增 `sort_issues(issues)`，按 `(-priority, code)` 稳定排序；`analyze_html` 在两个 `return` 前都把 `report.issues` 排序后再返回；
+  - 因此 `audit_url` 与 `check_i18n` 现在都按「最该先修」在前返回，兑现文档承诺。改动跨解析层与输出层，但不新增任何检测维度、不引入新依赖、不破坏既有字段/单测。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例（`test_issues_sorted_by_severity_most_severe_first` 断言 issues 严格降序且首条为 error、末条为 info；`test_issue_priority_matches_severity_rank` 断言每条 `priority == SEVERITY_RANK[severity]`）；总用例 18 → 20，全部通过。
+- **文档**：README Features 把「prioritized issues」改写为「issues sorted by severity + 每条带 `priority` 字段」；Example JSON 增加 `"priority": 2` 字段，与真实返回一致。
+- **测试结果**：`pytest -q` → 20 passed。
+- **对 Codex for OSS 申请的贡献**：7 天循环收官。Day 7 回到「输出可用性」这一最贴近真实使用场景的维度——AI agent 拿到一份几十上百条 issue 的报告，真正有价值的是「先告诉它最该改什么」。GlobeLens 把严重度做成可机读、可排序的字段，并兑现「prioritized」承诺，体现维护者始终在想「agent 怎么用这份结果」而非堆功能。至此证据链完整：**新审计维度 ×4（H1/alt、meta robots/JSON-LD、mixed content、…）＋ 工具参数化 ×3 ＋ 两层健壮性（解析层相对 URL/空 HTML、网络层安全解码/截断）＋ 输出优先级排序**，每一步可测、文档同步、向后兼容，且 7 天连续真实提交。另见 `SUMMARY.md`（7 天汇总 + 申请素材 + 分发文案草稿）。
