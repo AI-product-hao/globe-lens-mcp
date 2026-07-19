@@ -1,9 +1,14 @@
-# GlobeLens — 7-Day Maintenance Summary
+# GlobeLens — Maintenance Summary
 
 > Generated on **2026-07-18** after Day 7, as the capstone of a 7-day continuous
 > maintenance streak. Purpose: document the project's real, verifiable progress
 > and provide ready-to-use material for the **OpenAI Codex for Open Source**
 > application (openai.com/form/codex-for-oss).
+>
+> **Updated 2026-07-19 (Day 8):** maintenance continues beyond the 7-day sprint —
+> a new audit dimension (broken in-page anchors) shipped with tests. This living
+> summary now tracks the ongoing streak, which is even stronger evidence than the
+> initial burst.
 
 ---
 
@@ -54,6 +59,8 @@ staging/preview/self-signed-cert workflows.
 - **Image `alt` coverage** — counts images and those missing `alt`.
 - **Mixed content** — plaintext `http://` subresources on HTTPS pages (with
   tag/attr/url for each), correctly ignoring relative & protocol-relative URLs.
+- **Broken in-page anchors** — `href="#frag"` links whose target `id`/`name` does
+  not exist in the document (they look fine in source but do nothing on click).
 - **Truncation signal** — `page_truncated` info when the page exceeded 2 MiB.
 - **Degenerate input** — `empty_html` error (score 0) instead of a crash.
 - **Crawl readiness** — live `robots.txt` / `sitemap.xml` presence.
@@ -83,6 +90,7 @@ first.
 | 5 | 2026-07-16 | new audit dim | mixed-content detection (HTTPS pages) | 14 passed |
 | 6 | 2026-07-17 | robustness | safe charset decoding + oversized-page truncation | 18 passed |
 | 7 | 2026-07-18 | issue severity | `priority` field + severity-sorted output (true "prioritized issues") | **20 passed** |
+| 8 | 2026-07-19 | new audit dim | broken in-page anchor links (`href="#frag"` → missing target) | **22 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -100,7 +108,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 7-day streak of tested, documented, backward-compatible
+> project with a continuous 8+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us

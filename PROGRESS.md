@@ -82,3 +82,13 @@
 - **文档**：README Features 把「prioritized issues」改写为「issues sorted by severity + 每条带 `priority` 字段」；Example JSON 增加 `"priority": 2` 字段，与真实返回一致。
 - **测试结果**：`pytest -q` → 20 passed。
 - **对 Codex for OSS 申请的贡献**：7 天循环收官。Day 7 回到「输出可用性」这一最贴近真实使用场景的维度——AI agent 拿到一份几十上百条 issue 的报告，真正有价值的是「先告诉它最该改什么」。GlobeLens 把严重度做成可机读、可排序的字段，并兑现「prioritized」承诺，体现维护者始终在想「agent 怎么用这份结果」而非堆功能。至此证据链完整：**新审计维度 ×4（H1/alt、meta robots/JSON-LD、mixed content、…）＋ 工具参数化 ×3 ＋ 两层健壮性（解析层相对 URL/空 HTML、网络层安全解码/截断）＋ 输出优先级排序**，每一步可测、文档同步、向后兼容，且 7 天连续真实提交。另见 `SUMMARY.md`（7 天汇总 + 申请素材 + 分发文案草稿）。
+
+## Day 8 — 2026-07-19（7 天冲刺之后的持续维护）
+- **新增审计维度（断链检测：页面内锚点，与 Day 7「严重级别排序」不同类，满足避免连续同类规则）**：在 `analyzer.py` 纯 HTML 解析层新增一类真实可用、且站长极常踩的 bug——**断掉的页内锚点链接**：
+  - 收集文档内所有元素的 `id` 与遗留 `name` 作为合法跳转目标；遍历 `<a href="#fragment">`，若其 `#fragment` 在目标集合中不存在，则记入 `broken_anchors`（每条含 `href` 与可见 `text`，方便 agent 直接定位修复）；`href="#"` 这种「回顶」链接视为合法、不误报；重复 fragment 去重。
+  - 命中后给出 `broken_anchors` warning——这类链接源码里看着正常、一点击却毫无反应，损害可访问性、内链 SEO 与 UX，是「页面改版后忘了同步锚点」最常见的结果。
+  - 新增字段 `broken_anchors`（向后兼容，默认空列表，不影响既有 `to_dict`）；逻辑零网络依赖、可独立单测。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例（`test_flags_broken_inpage_anchors` 断言 `#features`/`#top` 正常解析、`#pricing` 被判为断链、`href="#"` 被忽略、记录含 `text`；`test_ignores_valid_anchors_and_top_link` 断言全部锚点命中 + `href="#"` 时无任何 `broken_anchors` 告警）；总用例 20 → 22，全部通过。
+- **文档**：README Features 中 `audit_url` 说明补充 **broken in-page anchor links**。
+- **测试结果**：`pytest -q` → 22 passed。
+- **对 Codex for OSS 申请的贡献**：7 天冲刺后并未停更——**持续真实维护**本身比一次性 7 天爆发更具说服力（评审看的是「长期在维护」而非「曾经冲刺」）。本次回到「能审计什么」上加法，且选的是纯 HTML、零网络、可单测的信号，延续项目「analyzer 无网络依赖、每改必测」的定位；类别轮换仍健康（新维度 D1/D3/D5/D8 ×4、工具参数 D2、健壮性 D4/D6、严重级别 D7），无连续同类、无破坏性变更、无新依赖。另见 `SUMMARY.md`（已追加 Day 8 行）。
