@@ -186,6 +186,47 @@ def test_no_mixed_content_for_relative_or_http_page():
     assert "mixed_content" not in [i.code for i in http_page.issues]
 
 
+SAMPLE_ANCHORS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Anchor Demo</title></head><body>
+<h1>Hi</h1>
+<a id="top"></a>
+<nav>
+  <a href="#top">Back to top</a>
+  <a href="#features">Features</a>
+  <a href="#pricing">Pricing</a>
+  <a href="#">Empty link</a>
+</nav>
+<section id="features"><h2>Features</h2></section>
+</body></html>"""
+
+
+def test_flags_broken_inpage_anchors():
+    r = analyze_html(SAMPLE_ANCHORS, "https://example.com")
+    codes = [i.code for i in r.issues]
+    # "#features" resolves (id present), "#top" resolves (id present),
+    # "#pricing" is dangling, and href="#" is a valid scroll-to-top (ignored).
+    assert "broken_anchors" in codes
+    assert len(r.broken_anchors) == 1
+    broken = r.broken_anchors[0]
+    assert broken["href"] == "#pricing"
+    assert "text" in broken  # the visible link text is captured for easy fixing
+
+
+def test_ignores_valid_anchors_and_top_link():
+    good = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8"><title>ok</title></head>'
+        '<body><h1>Hi</h1>'
+        '<a id="contact"></a>'
+        '<a href="#contact">Contact</a>'
+        '<a href="#">Top</a>'
+        '</body></html>',
+        "https://example.com",
+    )
+    assert good.broken_anchors == []
+    assert "broken_anchors" not in [i.code for i in good.issues]
+
+
 def test_flags_page_truncated():
     r = analyze_html(SAMPLE_GOOD, "https://example.com", truncated=True)
     codes = [i.code for i in r.issues]

@@ -20,7 +20,8 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   canonical, viewport, charset, Open Graph / Twitter cards, **H1 structure**
   (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**
-  (insecure `http://` subresources on HTTPS pages), plus `robots.txt` /
+  (insecure `http://` subresources on HTTPS pages), **broken in-page anchor
+  links** (`href="#frag"` pointing to a missing target), plus `robots.txt` /
   `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
   > `info`), so the agent can act on the most urgent fix first.

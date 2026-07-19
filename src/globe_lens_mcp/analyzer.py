@@ -56,6 +56,7 @@ class AuditReport:
     h1_count: int = 0
     images_total: int = 0
     images_missing_alt: int = 0
+    broken_anchors: list[dict[str, str]] = field(default_factory=list)
     mixed_content: list[dict[str, str]] = field(default_factory=list)
     meta_robots: str | None = None
     has_json_ld: bool = False
@@ -254,6 +255,45 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 "warning", "mixed_content",
                 f"Found {len(report.mixed_content)} insecure HTTP subresource(s) on an "
                 f"HTTPS page; browsers may block them and they hurt trust/SEO."))
+
+    # --- broken in-page anchor links ---
+    # An in-page jump link (href="#fragment") that targets an id/name which does
+    # not exist in the document looks fine in source but does nothing when
+    # clicked — a real, common bug that hurts accessibility, internal-link SEO,
+    # and UX. We collect every element id/name as a valid jump target and report
+    # any anchor whose target is missing. (Pure HTML, no network — unlike full
+    # cross-page link checking, which needs a crawl.)
+    anchor_targets: set[str] = set()
+    for el in soup.find_all(attrs={"id": True}):
+        anchor_targets.add(str(el.get("id")))
+    for el in soup.find_all(attrs={"name": True}):
+        n = el.get("name")
+        if isinstance(n, str):
+            anchor_targets.add(n)
+    seen_anchor: set[str] = set()
+    for a in soup.find_all("a"):
+        href = a.get("href")
+        if not isinstance(href, str):
+            continue
+        href = href.strip()
+        if not href.startswith("#"):
+            continue
+        frag = href[1:].strip()
+        if not frag:
+            # href="#" → scroll-to-top; a valid (if empty) target, not broken.
+            continue
+        if frag in anchor_targets or frag in seen_anchor:
+            continue
+        seen_anchor.add(frag)
+        report.broken_anchors.append({
+            "href": href,
+            "text": (a.get_text() or "").strip()[:80],
+        })
+    if report.broken_anchors:
+        report.issues.append(Issue(
+            "warning", "broken_anchors",
+            f"Found {len(report.broken_anchors)} in-page anchor link(s) pointing to a "
+            f"missing #fragment target; they do nothing when clicked."))
 
     # --- partial-input signal: the page was truncated before analysis ---
     if truncated:
