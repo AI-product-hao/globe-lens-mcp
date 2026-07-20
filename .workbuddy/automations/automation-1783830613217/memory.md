@@ -10,6 +10,8 @@
 - Day 4：2026-07-15 完成（见下）。
 - Day 5：2026-07-16 完成（见下）。
 - Day 6：2026-07-17 完成（见下）。
+- Day 7：2026-07-18 完成（见下；K=7 收官，已生成 SUMMARY.md）。
+- Day 8：2026-07-19 完成（见下；7 天冲刺后持续维护，证明长期活跃）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -50,6 +52,22 @@
 - 测试：pytest → 18 passed（14→18）；新增 analyze 层 1 例 + server 层 3 例（非 ASCII 解码还原、超大截断、check_i18n 截断标志透传）。
 - Commit：4eb2bee (feat) + 178f0a0 (docs/PROGRESS)。注意：feat 初版 commit message 误用反引号被 bash 命令替换吃掉 `truncated/page_truncated` 两词，已 `git commit --amend` 修正为无反引号版本（本地未推送，安全）。
 - 下一步（Day 7）：做一类与 Day 6 不同类的改进并生成 SUMMARY.md。
+
+## Day 7 — 2026-07-18（K=7 收官）
+- 改动类型：优化 Issue 严重级别与排序（与 Day 5「新增审计维度」、Day 6「边界健壮性」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 新增 `SEVERITY_RANK` + `Issue.priority` 字段（`__post_init__` 自动推导）+ `sort_issues()`（按 -priority, code 稳定排序）；`analyze_html` 两处 return 前排序；`audit_url`/`check_i18n` 现按严重度优先返回，兑现「prioritized issues」承诺；新增 2 测试（降序 + priority 映射）；README Features/Example 同步 `priority` 字段。
+- 测试：pytest → 20 passed（18→20）。
+- Commit：c36ec01 (feat) + 5dcf349 (docs/PROGRESS + SUMMARY)。
+- 同时生成 SUMMARY.md（7 天汇总表、功能/工具清单、Codex for OSS 价值陈述草稿、明确「star 增长依赖主动分发」+ X×2/Reddit/即刻 文案草稿）。
+- 7 天类别轮换：新维度(D1/D3/D5) / 工具参数(D2) / 健壮性(D4/D6) / 严重级别(D7)，无连续同类、无破坏性变更、无新依赖。
+
+## Day 8 — 2026-07-19（持续维护）
+- 改动类型：新增审计维度（断掉的页内锚点链接；与 Day 7「严重级别排序」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 新增 `broken_anchors` 字段 + 检测逻辑（收集文档内 id/name 为合法跳转目标；`<a href="#frag">` 的 frag 不存在则记为断链，含 href/text；`href="#"` 视为合法、重复去重）；新增 2 测试（断链命中 + 全部命中/忽略回顶链接）；README Features 同步。
+- 测试：pytest → 22 passed（20→22）。
+- Commit：8f7fbeb (feat) + d8a6d30 (docs/PROGRESS/SUMMARY)。
+- 说明：K=7 已达，但自动化仍每日 ACTIVE；选择继续维护——持续活跃比一次性 7 天爆发更具 Codex 证据力。SUMMARY.md 标题改为「Maintenance Summary」并加「Updated 2026-07-19 (Day 8)」注，附 Day 8 行与维度清单、价值陈述「8+ day streak」。
+- 下一步（Day 9）：避开「新增审计维度」以保多样性；候选：README 真实示例增强 / 补充单元测试覆盖新逻辑 / 改进 Issue 文案 / 解析层新边界 / 或新的不同类改进（如 robots/sitemap 解析、locale 一致性）。
 
 ## Day 5 — 2026-07-16
 - 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。

@@ -9,6 +9,10 @@
 > a new audit dimension (broken in-page anchors) shipped with tests. This living
 > summary now tracks the ongoing streak, which is even stronger evidence than the
 > initial burst.
+>
+> **Updated 2026-07-20 (Day 9):** the streak keeps going — `audit_url` and
+> `check_i18n` now return a structured error instead of throwing on unreachable
+> targets (a real agent-facing robustness fix). 25 tests passing.
 
 ---
 
@@ -75,6 +79,9 @@ first.
 - Empty / whitespace-only HTML returns a clear error (never crashes).
 - Any charset decoded safely (`errors="replace"`); non-English pages never break.
 - Oversized pages truncated at 2 MiB with a `page_truncated` flag.
+- Unreachable targets (`404`/`500` or DNS/timeout) return a structured
+  `{"ok": false, "status_code": …, "error": …}` instead of throwing, so the
+  agent can retry / report / skip without losing the tool call.
 
 ---
 
@@ -91,6 +98,7 @@ first.
 | 6 | 2026-07-17 | robustness | safe charset decoding + oversized-page truncation | 18 passed |
 | 7 | 2026-07-18 | issue severity | `priority` field + severity-sorted output (true "prioritized issues") | **20 passed** |
 | 8 | 2026-07-19 | new audit dim | broken in-page anchor links (`href="#frag"` → missing target) | **22 passed** |
+| 9 | 2026-07-20 | error handling | `audit_url` / `check_i18n` return structured error on 404/network failure (no crash) | **25 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -108,7 +116,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 8+ day streak of tested, documented, backward-compatible
+> project with a continuous 9+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us

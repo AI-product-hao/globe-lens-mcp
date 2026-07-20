@@ -92,3 +92,13 @@
 - **文档**：README Features 中 `audit_url` 说明补充 **broken in-page anchor links**。
 - **测试结果**：`pytest -q` → 22 passed。
 - **对 Codex for OSS 申请的贡献**：7 天冲刺后并未停更——**持续真实维护**本身比一次性 7 天爆发更具说服力（评审看的是「长期在维护」而非「曾经冲刺」）。本次回到「能审计什么」上加法，且选的是纯 HTML、零网络、可单测的信号，延续项目「analyzer 无网络依赖、每改必测」的定位；类别轮换仍健康（新维度 D1/D3/D5/D8 ×4、工具参数 D2、健壮性 D4/D6、严重级别 D7），无连续同类、无破坏性变更、无新依赖。另见 `SUMMARY.md`（已追加 Day 8 行）。
+
+## Day 9 — 2026-07-20（持续维护，Day 8 之后的第 2 天）
+- **改动类型：服务端错误处理的健壮性（与 Day 8「新增审计维度」不同类，满足避免连续同类规则）**。此前 `audit_url` / `check_i18n` 在 `resp.raise_for_status()` 处遇到 404/500 或 DNS/超时直接抛未捕获异常——AI agent 调用工具时拿到的是堆栈而非结果，是最差体验。本次把「目标不可达」做成真实结构化输出：
+  - 新增模块级 `_http_error_result(url, status_code, message)`，返回 `{"ok": false, "url": …, "status_code": …, "error": …}`；
+  - `audit_url` 与 `check_i18n` 的 GET + `raise_for_status()` 用 `try/except (httpx.HTTPStatusError, httpx.HTTPError)` 包裹，非 2xx 与网络错误都转成上面的结构化错误，**不再崩溃**；成功路径零改动（向后兼容，既有返回的字段与单测不受影响）；
+  - `check_robots_sitemap` 本就各自 try/except，无需改动。
+- **测试**：`tests/test_server.py` 新增 3 个用例——`test_audit_url_returns_structured_error_on_404`（404 → `ok:false`/`status_code:404`/`error` 存在且 `html_lang` 不泄漏）、`test_audit_url_returns_structured_error_on_network_failure`（ConnectError → `status_code:None`/`error`）、`test_check_i18n_returns_structured_error_on_404`；总用例 22 → 25，全部通过。
+- **文档**：README「Robust by design」一节补充「unreachable 目标返回结构化错误而非抛异常，agent 可 retry/report/skip」。
+- **测试结果**：`pytest -q` → 25 passed。
+- **对 Codex for OSS 申请的贡献**：7 天冲刺后进入「长期精修」阶段——本次针对的是**agent 真实调用时的失败路径**，这是多数 MCP 工具最容易被忽视、却最影响可用性的地方：一个 404 就整段工具调用崩溃，agent 毫无抓手。GlobeLens 用结构化错误把「重试/上报/跳过」的选择权交回 agent，且每一项都有网络层单测守护。类别轮换仍健康（新维度 D1/D3/D5/D8、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9），无连续同类、无破坏性变更、无新依赖。另见 `SUMMARY.md`（已追加 Day 9 行与 robustness 子弹点）。
