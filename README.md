@@ -32,7 +32,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   HTML returns a clear `empty_html` error instead of crashing. GlobeLens also
   decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
-  audits stay fast and bounded.
+  audits stay fast and bounded. When a target is unreachable, `audit_url` and
+  `check_i18n` return a **structured error** (`{"ok": false, "status_code": …,
+  "error": …}`) instead of throwing — so the agent can retry / report / skip
+  rather than lose the whole tool call.
 
 ## Install
 

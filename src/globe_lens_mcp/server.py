@@ -39,6 +39,21 @@ def _decode_response(resp: httpx.Response) -> tuple[str, bool]:
     return text, truncated
 
 
+def _http_error_result(url: str, status_code: int | None, message: str) -> dict:
+    """Agent-friendly failure payload for non-2xx or network errors.
+
+    Previously a 404/500 or a DNS/timeout failure surfaced as an *unhandled
+    exception* — the agent got a stack trace and no result at all. Now we
+    return a small, parseable dict so an AI agent can react (retry, report, or
+    skip the URL) instead of crashing the whole tool call.
+    """
+    return {
+        "ok": False,
+        "url": url,
+        "status_code": status_code,
+        "error": message,
+    }
+
 
 @mcp.tool()
 async def audit_url(
@@ -72,8 +87,15 @@ async def audit_url(
         headers=headers,
         verify=verify_ssl,
     ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+        try:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return _http_error_result(
+                url, e.response.status_code,
+                f"HTTP {e.response.status_code} returned by {url}.")
+        except httpx.HTTPError as e:
+            return _http_error_result(url, None, f"Request to {url} failed: {e}")
         text, truncated = _decode_response(resp)
         report = analyze_html(text, url, truncated=truncated)
         robots_url, sitemap_url = robots_sitemap_urls(url)
@@ -115,8 +137,15 @@ async def check_i18n(
         headers=headers,
         verify=verify_ssl,
     ) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+        try:
+            resp = await client.get(url)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            return _http_error_result(
+                url, e.response.status_code,
+                f"HTTP {e.response.status_code} returned by {url}.")
+        except httpx.HTTPError as e:
+            return _http_error_result(url, None, f"Request to {url} failed: {e}")
         text, truncated = _decode_response(resp)
         report = analyze_html(text, url, truncated=truncated)
         issues = [asdict(i) for i in report.issues

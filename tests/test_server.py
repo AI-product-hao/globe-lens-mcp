@@ -171,3 +171,56 @@ def test_check_i18n_reports_truncation_flag():
         result = asyncio.run(server.check_i18n("https://example.com"))
 
     assert result["truncated"] is True
+
+
+def test_audit_url_returns_structured_error_on_404():
+    # A 404 (or any non-2xx) must become a parseable error dict, not an
+    # unhandled exception that loses the whole tool call for the agent.
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(404)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com/missing"))
+
+    assert result["ok"] is False
+    assert result["status_code"] == 404
+    assert result["url"] == "https://example.com/missing"
+    assert "error" in result
+    # no partial report should leak out alongside the error
+    assert "html_lang" not in result
+
+
+def test_audit_url_returns_structured_error_on_network_failure():
+    # DNS / timeout / connection errors must also be caught and returned.
+    def make_client(*args, **kwargs):
+        def boom(request: httpx.Request) -> httpx.Response:
+            raise httpx.ConnectError("Name or service not known")
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(boom),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://nope.invalid"))
+
+    assert result["ok"] is False
+    assert result["status_code"] is None
+    assert "error" in result
+
+
+def test_check_i18n_returns_structured_error_on_404():
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(404)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com/missing"))
+
+    assert result["ok"] is False
+    assert result["status_code"] == 404
+    assert "error" in result
