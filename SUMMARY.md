@@ -13,6 +13,10 @@
 > **Updated 2026-07-20 (Day 9):** the streak keeps going — `audit_url` and
 > `check_i18n` now return a structured error instead of throwing on unreachable
 > targets (a real agent-facing robustness fix). 25 tests passing.
+>
+> **Updated 2026-07-21 (Day 10):** the streak is now 10+ days — a new audit
+> dimension shipped: **thin-content detection** (visible body word count,
+> script/style boilerplate excluded). 27 tests passing.
 
 ---
 
@@ -65,6 +69,9 @@ staging/preview/self-signed-cert workflows.
   tag/attr/url for each), correctly ignoring relative & protocol-relative URLs.
 - **Broken in-page anchors** — `href="#frag"` links whose target `id`/`name` does
   not exist in the document (they look fine in source but do nothing on click).
+- **Thin content** — visible body word count (script/style boilerplate excluded)
+  below `THIN_CONTENT_MIN_WORDS = 300`, flagging low-value pages search engines
+  demote.
 - **Truncation signal** — `page_truncated` info when the page exceeded 2 MiB.
 - **Degenerate input** — `empty_html` error (score 0) instead of a crash.
 - **Crawl readiness** — live `robots.txt` / `sitemap.xml` presence.
@@ -99,6 +106,7 @@ first.
 | 7 | 2026-07-18 | issue severity | `priority` field + severity-sorted output (true "prioritized issues") | **20 passed** |
 | 8 | 2026-07-19 | new audit dim | broken in-page anchor links (`href="#frag"` → missing target) | **22 passed** |
 | 9 | 2026-07-20 | error handling | `audit_url` / `check_i18n` return structured error on 404/network failure (no crash) | **25 passed** |
+| 10 | 2026-07-21 | new audit dim | thin-content detection (visible body word count, script/style excluded) | **27 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -116,7 +124,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 9+ day streak of tested, documented, backward-compatible
+> project with a continuous 10+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -146,8 +154,9 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 7 days, 7 real commits, 20 passing tests. GlobeLens now returns SEO issues
-> *sorted by severity* so your agent fixes the urgent stuff first.
+> 10 days, 10+ real commits, 27 passing tests. GlobeLens now flags thin content,
+> broken anchors, mixed content, noindex… and returns SEO issues *sorted by
+> severity* so your agent fixes the urgent stuff first.
 > Small, tested, documented — the kind of OSS I wish more tools were.
 > github.com/AI-product-hao/globe-lens-mcp
 

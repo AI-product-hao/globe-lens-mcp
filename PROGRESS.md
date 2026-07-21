@@ -102,3 +102,13 @@
 - **文档**：README「Robust by design」一节补充「unreachable 目标返回结构化错误而非抛异常，agent 可 retry/report/skip」。
 - **测试结果**：`pytest -q` → 25 passed。
 - **对 Codex for OSS 申请的贡献**：7 天冲刺后进入「长期精修」阶段——本次针对的是**agent 真实调用时的失败路径**，这是多数 MCP 工具最容易被忽视、却最影响可用性的地方：一个 404 就整段工具调用崩溃，agent 毫无抓手。GlobeLens 用结构化错误把「重试/上报/跳过」的选择权交回 agent，且每一项都有网络层单测守护。类别轮换仍健康（新维度 D1/D3/D5/D8、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9），无连续同类、无破坏性变更、无新依赖。另见 `SUMMARY.md`（已追加 Day 9 行与 robustness 子弹点）。
+
+## Day 10 — 2026-07-21（持续维护，Day 9 之后的第 1 天）
+- **改动类型：新增审计维度（thin-content 内容深度检测；与 Day 9「错误处理」不同类，满足避免连续同类规则）**。在 `analyzer.py` 纯 HTML 解析层新增一类真实可用、却被多数轻量审计工具忽略的 SEO 信号——**内容过薄（thin content）**：
+  - 统计页面**可见正文词数**（`word_count` 字段），刻意排除 `<script>` / `<style>` 样板文本（避免把 JS 误算成内容）；阈值常量 `THIN_CONTENT_MIN_WORDS = 300`（模块级、易调）。低于阈值即记 `thin_content` info 告警，提示站长补充实质性内容——搜索引擎会把低文本量的页面判为低价值（thin content），是常见的「收录弱/排名差」元凶。
+  - 逻辑零网络依赖、非破坏性：仅向 `AuditReport` 增量加 `word_count: int = 0`，不触及既有字段与 `to_dict`；info 级惩罚（3 分）不会拉爆分数。
+  - `SAMPLE_GOOD` 正文仅 `<h1>Hi</h1>`（1 词）仍会被标 thin_content，但分数 100−3=97 ≥ 90，原有断言不受影响。
+- **测试**：`tests/test_analyzer.py` 新增 2 个用例——`test_flags_thin_content_excluding_script_text`（2 词正文被标 thin、`word_count==2`、且 script 文本不计入）、`test_skips_thin_content_for_rich_page`（320+ 词正文不标 thin、`word_count > 300` 且精确等于 321）；总用例 25 → 27，全部通过。注：首版把句子词数算错（应为 8 词非 11）导致 rich 用例误判 thin，已修正重复次数与期望；过程中还修掉一处 `for r.issues` 笔误为 `for i in r.issues`。
+- **文档**：README Features 在 `audit_url` 说明补 **thin-content detection（正文词数低于健康阈值，排除 script/style 样板）**。
+- **测试结果**：`pytest -q` → 27 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 10 天，且类别仍健康轮换（新维度 D1/D3/D5/D8/D10、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9），无连续同类、无破坏性变更、无新依赖。本次回到「能审计什么」上加法，选的是纯 HTML、零网络、可单测、且站长高频踩坑的信号——thin content 正是 Google「低价值页面」的核心判定维度之一，却极少被 MCP 审计工具覆盖。配合前 9 天：新维度 ×5、工具参数化、两层健壮性、严重级别排序、失败路径结构化，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景」，且每一步可测、文档同步、向后兼容——持续真实提交本身就是对「长期在维护」的最强证明。另见 `SUMMARY.md`（已追加 Day 10 行、维度清单与价值陈述更新为 10+ day streak）。
