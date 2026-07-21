@@ -5,6 +5,7 @@ be unit-tested without any network access. Network fetching lives in server.py.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 from urllib.parse import urljoin, urlparse
@@ -16,6 +17,11 @@ from bs4 import BeautifulSoup
 # single source of truth for both the per-issue `priority` field and the global
 # sort, so the two can never drift apart.
 SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
+
+# Minimum body word count treated as "substantive" for SEO. Pages below this are
+# flagged so an agent can recognize thin content (a known low-value signal that
+# search engines demote). Kept as a module constant so it is easy to tune.
+THIN_CONTENT_MIN_WORDS = 300
 
 
 @dataclass
@@ -50,6 +56,7 @@ class AuditReport:
     title_length: int = 0
     meta_description: str | None = None
     meta_description_length: int = 0
+    word_count: int = 0
     html_lang: str | None = None
     charset: str | None = None
     viewport: bool = False
@@ -294,6 +301,25 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             "warning", "broken_anchors",
             f"Found {len(report.broken_anchors)} in-page anchor link(s) pointing to a "
             f"missing #fragment target; they do nothing when clicked."))
+
+    # --- content depth: thin-content / body word count ---
+    # Search engines treat pages with very little original text as low-value
+    # ("thin content"). We count *visible* body words, deliberately excluding
+    # <script>/<style> boilerplate, so an agent can spot pages that need more
+    # substance. Pure HTML, network-free, and non-mutating (we don't decompose
+    # tags, so later checks are unaffected).
+    body = soup.body or soup
+    visible_text = " ".join(
+        s
+        for s in body.find_all(string=True)
+        if s.parent is not None and s.parent.name not in ("script", "style")
+    )
+    report.word_count = len(re.split(r"\s+", visible_text.strip())) if visible_text.strip() else 0
+    if report.word_count < THIN_CONTENT_MIN_WORDS:
+        report.issues.append(Issue(
+            "info", "thin_content",
+            f"Page body has only {report.word_count} words (< {THIN_CONTENT_MIN_WORDS}); "
+            f"consider adding more substantive content for SEO."))
 
     # --- partial-input signal: the page was truncated before analysis ---
     if truncated:

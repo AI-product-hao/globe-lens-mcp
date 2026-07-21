@@ -1,4 +1,4 @@
-from globe_lens_mcp.analyzer import analyze_html
+from globe_lens_mcp.analyzer import analyze_html, THIN_CONTENT_MIN_WORDS
 
 SAMPLE_GOOD = """<!doctype html>
 <html lang="en">
@@ -231,6 +231,42 @@ def test_flags_page_truncated():
     r = analyze_html(SAMPLE_GOOD, "https://example.com", truncated=True)
     codes = [i.code for i in r.issues]
     assert "page_truncated" in codes
+
+
+_SENTENCE = "GlobeLens audits websites for seo and internationalization readiness."
+
+SAMPLE_THIN = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Thin Content Demo</title></head>
+<body><h1>Hi</h1><p>Short.</p>
+<script>var x = "this boilerplate must not count as body content";</script>
+</body></html>"""
+
+# 8 words per sentence * 40 = 320 visible words, safely above the 300 threshold.
+SAMPLE_RICH = (
+    "<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">\n"
+    "<title>Rich Content Demo</title></head>\n<body><h1>Welcome</h1><p>"
+    + " ".join([_SENTENCE] * 40)
+    + "</p></body></html>"
+)
+
+
+def test_flags_thin_content_excluding_script_text():
+    r = analyze_html(SAMPLE_THIN, "https://example.com")
+    codes = [i.code for i in r.issues]
+    # a two-word body is flagged as thin, and script/style text is NOT counted
+    assert "thin_content" in codes
+    assert r.word_count == 2
+
+
+def test_skips_thin_content_for_rich_page():
+    r = analyze_html(SAMPLE_RICH, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "thin_content" not in codes
+    # 40 repetitions * 8 words + the "Welcome" <h1> = 321 visible words, above
+    # the 300 threshold
+    assert r.word_count > THIN_CONTENT_MIN_WORDS
+    assert r.word_count == 40 * 8 + 1
 
 
 # A page that triggers all three severity tiers at once: a missing <html lang>
