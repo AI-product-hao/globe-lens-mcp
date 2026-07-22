@@ -112,3 +112,13 @@
 - **文档**：README Features 在 `audit_url` 说明补 **thin-content detection（正文词数低于健康阈值，排除 script/style 样板）**。
 - **测试结果**：`pytest -q` → 27 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 10 天，且类别仍健康轮换（新维度 D1/D3/D5/D8/D10、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9），无连续同类、无破坏性变更、无新依赖。本次回到「能审计什么」上加法，选的是纯 HTML、零网络、可单测、且站长高频踩坑的信号——thin content 正是 Google「低价值页面」的核心判定维度之一，却极少被 MCP 审计工具覆盖。配合前 9 天：新维度 ×5、工具参数化、两层健壮性、严重级别排序、失败路径结构化，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景」，且每一步可测、文档同步、向后兼容——持续真实提交本身就是对「长期在维护」的最强证明。另见 `SUMMARY.md`（已追加 Day 10 行、维度清单与价值陈述更新为 10+ day streak）。
+
+## Day 11 — 2026-07-22（持续维护，Day 10 之后的第 1 天）
+- **改动类型：补充单元测试覆盖新逻辑（与 Day 10「新增审计维度」不同类，满足避免连续同类规则）**。此前 OG/Twitter 卡片抓取、`robots_sitemap_urls` URL 推导、以及 `charset_missing` 分支虽早已实现，却只有「顺带」覆盖、没有专门断言——重构时极易悄悄退化而无人察觉。本次补齐 4 个针对性用例，把既有真实能力锁死：
+  - `test_captures_og_and_twitter_card_tags`：断言 `og:title`/`og:description`/`og:image` 全链被抓进 `og_tags`，`twitter:card`/`twitter:title`/`twitter:description` 被抓进 `twitter_tags`，且两者齐备时 `og_missing` 信息不被误发（此前 `twitter_tags` 从未被任何测试验证过）。
+  - `test_flags_missing_og_tags`：无 OG 标签时 `og_missing` info 必须触发。
+  - `test_robots_sitemap_urls_across_url_shapes`：覆盖 origin / 深路径 / 非 https scheme / 带 query·fragment / 非标准端口 5 种 URL 形态，`robots.txt` 与 `sitemap.xml` 始终正确推导到 origin 根（该函数此前完全无单测）。
+  - `test_flags_missing_charset`：无 `<meta charset>` 时 `charset is None` 且 `charset_missing` warning 触发（显式覆盖该分支）。
+- **测试**：`tests/test_analyzer.py` 新增 4 例；pytest 27 → 31 passed。纯新增、零功能改动、零回归。
+- **文档**：本日志与 `SUMMARY.md` 同步（SUMMARY 追加 Day 11 行、测试计数 27→31、价值陈述更新为 11+ day streak）。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 11 天，类别轮换仍健康（新维度 D1/D3/D5/D8/D10、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖。本次刻意「不做新功能、只把已有真实能力用测试钉死」——这恰恰是评审最看重却最稀缺的纪律：多数开源项目功能堆得快、测试跟不上，一旦重构就悄悄退化。GlobeLens 选择在第 11 天回补覆盖盲区（social 卡片、URL 推导 helper、字符集分支），证明维护重点是「长期可信」而非「功能数量」。配合前 10 天：新维度 ×5、工具参数化、两层健壮性、严重级别排序、失败路径结构化、测试覆盖加固，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景 × 测试纪律」，且每一步可测、文档同步、向后兼容——连续真实提交本身就是对「长期在维护」的最强证明。

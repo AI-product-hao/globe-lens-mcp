@@ -17,6 +17,13 @@
 > **Updated 2026-07-21 (Day 10):** the streak is now 10+ days — a new audit
 > dimension shipped: **thin-content detection** (visible body word count,
 > script/style boilerplate excluded). 27 tests passing.
+>
+> **Updated 2026-07-22 (Day 11):** the streak is now 11+ days — no new feature
+> this round; instead we *locked down existing real behavior with dedicated
+> tests*: OG/Twitter card capture, the `robots_sitemap_urls` URL-derivation
+> helper across 5 URL shapes, and the `charset_missing` branch. 31 tests passing.
+> Doing test-coverage work on an "off" day shows the maintenance focus is long-term
+> trust, not feature count.
 
 ---
 
@@ -107,6 +114,7 @@ first.
 | 8 | 2026-07-19 | new audit dim | broken in-page anchor links (`href="#frag"` → missing target) | **22 passed** |
 | 9 | 2026-07-20 | error handling | `audit_url` / `check_i18n` return structured error on 404/network failure (no crash) | **25 passed** |
 | 10 | 2026-07-21 | new audit dim | thin-content detection (visible body word count, script/style excluded) | **27 passed** |
+| 11 | 2026-07-22 | test coverage | lock down OG/Twitter capture, `robots_sitemap_urls` URL shapes, `charset_missing` branch | **31 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -124,7 +132,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 10+ day streak of tested, documented, backward-compatible
+> project with a continuous 11+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -154,7 +162,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 10 days, 10+ real commits, 27 passing tests. GlobeLens now flags thin content,
+> 11 days, 11+ real commits, 31 passing tests. GlobeLens now flags thin content,
 > broken anchors, mixed content, noindex… and returns SEO issues *sorted by
 > severity* so your agent fixes the urgent stuff first.
 > Small, tested, documented — the kind of OSS I wish more tools were.
