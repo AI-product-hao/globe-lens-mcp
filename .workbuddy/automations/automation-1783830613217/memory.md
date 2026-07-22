@@ -12,6 +12,9 @@
 - Day 6：2026-07-17 完成（见下）。
 - Day 7：2026-07-18 完成（见下；K=7 收官，已生成 SUMMARY.md）。
 - Day 8：2026-07-19 完成（见下；7 天冲刺后持续维护，证明长期活跃）。
+- Day 9：2026-07-20 完成（见下；错误处理健壮性，证明长期精修）。
+- Day 10：2026-07-21 完成（见下；thin-content 新审计维度，10+ 天持续活跃）。
+- Day 11：2026-07-22 完成（见下；测试覆盖加固，OG/Twitter/robots_sitemap_urls/charset 分支，11+ 天持续活跃）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -68,6 +71,31 @@
 - Commit：8f7fbeb (feat) + d8a6d30 (docs/PROGRESS/SUMMARY)。
 - 说明：K=7 已达，但自动化仍每日 ACTIVE；选择继续维护——持续活跃比一次性 7 天爆发更具 Codex 证据力。SUMMARY.md 标题改为「Maintenance Summary」并加「Updated 2026-07-19 (Day 8)」注，附 Day 8 行与维度清单、价值陈述「8+ day streak」。
 - 下一步（Day 9）：避开「新增审计维度」以保多样性；候选：README 真实示例增强 / 补充单元测试覆盖新逻辑 / 改进 Issue 文案 / 解析层新边界 / 或新的不同类改进（如 robots/sitemap 解析、locale 一致性）。
+
+## Day 9 — 2026-07-20（持续维护，Day 8 之后第 2 天）
+- 改动类型：服务端错误处理的健壮性（与 Day 8「新增审计维度」不同类，满足避免连续同类规则）。
+- 内容：server.py 新增 `_http_error_result(url, status_code, message)`；`audit_url` 与 `check_i18n` 的 GET+raise_for_status 包进 `try/except (httpx.HTTPStatusError, httpx.HTTPError)`，404/5xx 与 DNS/超时改返回 `{"ok":false,"url":…,"status_code":…,"error":…}` 结构化错误，不再抛未捕获异常；成功路径零改动（向后兼容）。`check_robots_sitemap` 本就各自 try/except，不改。
+- 测试：tests/test_server.py 新增 3 例（404 结构化错误不含 html_lang 泄漏、ConnectError→status_code=None、check_i18n 404）；pytest 22 → 25 passed。
+- Commit：cbd0d7c (feat) + 5f104a4 (docs/PROGRESS/SUMMARY/本 memory)。
+- 下一步（Day 10）：避开「错误处理」以保多样性；候选：补充单元测试覆盖新逻辑（如 SAMPLE_GOOD 的 OG/Twitter 全链路、robots_sitemap_urls 解析、charset 分支）/ 解析层新边界 / README 真实示例增强 / 改进 Issue 文案。
+
+## Day 10 — 2026-07-21（持续维护，Day 9 之后第 1 天）
+- 改动类型：新增审计维度（thin-content 内容深度检测；与 Day 9「错误处理」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 新增 `THIN_CONTENT_MIN_WORDS=300` 常量 + `word_count: int` 字段；统计**可见正文词数**（排除 `<script>`/`<style>` 样板，非破坏性），低于阈值记 `thin_content` info 告警；tests 新增 2 例（thin 中标且 script 文本不计入、rich 不中标且精确词数）；README Features 同步。
+- 测试：pytest 25 → 27 passed。
+- Commit：fff8917 (feat) + b66b2ea (docs/PROGRESS/SUMMARY)。
+- 类别轮换仍健康（新维度 D1/D3/D5/D8/D10、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9），无连续同类、无破坏性变更、无新依赖。
+- 下一步（Day 11）：避开「新增审计维度」以保多样性；候选：README 真实示例增强 / 补充单元测试覆盖新逻辑（OG/Twitter 全链路、robots_sitemap_urls 解析、charset 分支）/ 解析层新边界 / 改进 Issue 文案与严重级别。
+
+## Day 11 — 2026-07-22（持续维护，Day 10 之后第 1 天）
+- 改动类型：补充单元测试覆盖新逻辑（与 Day 10「新增审计维度」不同类，满足避免连续同类规则）。补齐 4 个针对性用例，把既有真实能力锁死：
+  - `test_captures_og_and_twitter_card_tags`：断言 `og:title/og:description/og:image` 抓入 `og_tags`、`twitter:card/twitter:title/twitter:description` 抓入 `twitter_tags`、两者齐备时 `og_missing` 不误发（`twitter_tags` 此前从无测试）。
+  - `test_flags_missing_og_tags`：无 OG 时 `og_missing` info 必须触发。
+  - `test_robots_sitemap_urls_across_url_shapes`：origin/深路径/非 https/带 query·fragment/非标准端口 5 种形态，`robots.txt`+`sitemap.xml` 正确推导到 origin 根（该函数此前完全无单测）。
+  - `test_flags_missing_charset`：无 `<meta charset>` 时 `charset is None` 且 `charset_missing` warning 触发。
+- 测试：pytest 27 → 31 passed；纯新增、零功能改动、零回归。
+- Commit：3aab0e5 (test) + df4bac4 (docs/PROGRESS/SUMMARY)。
+- 下一步（Day 12）：避开「测试覆盖」以保多样性；候选：README 真实示例增强 / 解析层新边界（非 UTF-8 的 HTML 内 <meta charset> 二次校准、超大标签数量上限）/ 改进 Issue 文案与严重级别 / 新的不同类小改进（如 locale 一致性、sitemap/robots 解析）。
 
 ## Day 5 — 2026-07-16
 - 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。
