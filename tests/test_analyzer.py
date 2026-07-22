@@ -293,3 +293,71 @@ def test_issue_priority_matches_severity_rank():
         assert issue.priority == SEVERITY_RANK[issue.severity]
 
 
+# --- Coverage for social cards (OG / Twitter) and the URL-derivation helper ---
+# These behaviors were implemented in earlier days but had only implicit /
+# incidental coverage. Locking them down directly so a refactor cannot silently
+# drop a captured tag or break robots/sitemap URL derivation.
+SAMPLE_SOCIAL = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Social Demo</title>
+<meta property="og:title" content="Example">
+<meta property="og:description" content="desc">
+<meta property="og:image" content="https://example.com/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Example TW">
+<meta name="twitter:description" content="desc TW">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_captures_og_and_twitter_card_tags():
+    r = analyze_html(SAMPLE_SOCIAL, "https://example.com")
+    # full Open Graph chain is captured
+    assert r.og_tags.get("og:title") == "Example"
+    assert r.og_tags.get("og:description") == "desc"
+    assert r.og_tags.get("og:image") == "https://example.com/og.png"
+    # Twitter card tags are captured under their own namespace
+    assert r.twitter_tags.get("twitter:card") == "summary_large_image"
+    assert r.twitter_tags.get("twitter:title") == "Example TW"
+    assert r.twitter_tags.get("twitter:description") == "desc TW"
+    # both og:title and og:description present -> the og_missing info is NOT fired
+    assert "og_missing" not in [i.code for i in r.issues]
+
+
+def test_flags_missing_og_tags():
+    # SAMPLE_BAD has no OG tags at all -> the og_missing info must fire
+    r = analyze_html(SAMPLE_BAD, "https://example.com")
+    assert "og_missing" in [i.code for i in r.issues]
+
+
+def test_robots_sitemap_urls_across_url_shapes():
+    from globe_lens_mcp.analyzer import robots_sitemap_urls
+
+    # bare origin -> robots/sitemap at root
+    assert robots_sitemap_urls("https://example.com") == (
+        "https://example.com/robots.txt", "https://example.com/sitemap.xml")
+    # deep path -> the base is still the origin (not the path)
+    assert robots_sitemap_urls("https://example.com/products/widget") == (
+        "https://example.com/robots.txt", "https://example.com/sitemap.xml")
+    # non-https scheme is preserved
+    assert robots_sitemap_urls("http://example.com/a") == (
+        "http://example.com/robots.txt", "http://example.com/sitemap.xml")
+    # query string / fragment are stripped from the derived base
+    assert robots_sitemap_urls("https://example.com/p?x=1#frag") == (
+        "https://example.com/robots.txt", "https://example.com/sitemap.xml")
+    # non-standard port stays on the origin
+    assert robots_sitemap_urls("https://sub.example.com:8080/x") == (
+        "https://sub.example.com:8080/robots.txt",
+        "https://sub.example.com:8080/sitemap.xml")
+
+
+SAMPLE_NO_CHARSET = """<!doctype html>
+<html lang="en"><head><title>No Charset Demo</title></head>
+<body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_missing_charset():
+    r = analyze_html(SAMPLE_NO_CHARSET, "https://example.com")
+    assert r.charset is None
+    assert "charset_missing" in [i.code for i in r.issues]
+
+
