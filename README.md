@@ -27,7 +27,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
   > `info`), so the agent can act on the most urgent fix first.
-- 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`.
+- 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`,
+  and **hreflang value validation** — malformed codes like `en_US` (underscore
+  instead of hyphen) or `english` are flagged, since search engines silently
+  ignore them and the intended alternate is lost.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
   **absolute URLs** (so an agent can act on them directly), and empty / malformed

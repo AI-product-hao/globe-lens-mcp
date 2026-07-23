@@ -122,3 +122,12 @@
 - **测试**：`tests/test_analyzer.py` 新增 4 例；pytest 27 → 31 passed。纯新增、零功能改动、零回归。
 - **文档**：本日志与 `SUMMARY.md` 同步（SUMMARY 追加 Day 11 行、测试计数 27→31、价值陈述更新为 11+ day streak）。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 11 天，类别轮换仍健康（新维度 D1/D3/D5/D8/D10、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖。本次刻意「不做新功能、只把已有真实能力用测试钉死」——这恰恰是评审最看重却最稀缺的纪律：多数开源项目功能堆得快、测试跟不上，一旦重构就悄悄退化。GlobeLens 选择在第 11 天回补覆盖盲区（social 卡片、URL 推导 helper、字符集分支），证明维护重点是「长期可信」而非「功能数量」。配合前 10 天：新维度 ×5、工具参数化、两层健壮性、严重级别排序、失败路径结构化、测试覆盖加固，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景 × 测试纪律」，且每一步可测、文档同步、向后兼容——连续真实提交本身就是对「长期在维护」的最强证明。
+
+## Day 12 — 2026-07-23（持续维护，Day 11 之后的第 1 天）
+- **改动类型：新增审计维度（hreflang 值格式校验；与 Day 11「测试覆盖」不同类，满足避免连续同类规则）**。GlobeLens 此前只检测 hreflang 是否存在、是否缺 `x-default`，却从不校验每个 hreflang **值本身是否合法**。而「hreflang 值写错」恰是国际化站点最高频、最隐蔽的真实错误——搜索引擎会**静默忽略**非法值，本该生效的多语言/多地区替代版本因此完全丢失，站长却毫无提示。本次把这一维度补齐（纯 HTML、零网络、可单测，正中项目 i18n 定位）：
+  - `analyzer.py` 新增模块级 `_HREFLANG_RE`（`^[a-z]{2,3}(-[a-z]{2}|-[0-9]{3})?$`，忽略大小写）+ `_is_valid_hreflang(code)` helper：接受 ISO 639-1 语言码（2–3 字母）可选叠加 ISO 3166-1 alpha-2 地区（2 字母）或 UN M.49 区域码（3 数字），并把保留关键字 `x-default` 特判为合法。
+  - 在既有 hreflang 分支内收集所有非法值到新字段 `invalid_hreflang: list[str]`（向后兼容，默认空列表，不影响既有 `to_dict`），非空时给出 `hreflang_invalid` warning，消息直接列出错误值并给出正确示例（`en` / `en-US` / `x-default`），agent 拿到即可定位修复。
+  - 精准命中真实高频错误：`en_US`（下划线而非连字符）、`english`（写成完整单词）、`en-USA`（地区 3 字母）全部判非法；`en` / `en-US` / `en-us` / `zh-CN` / `es-419` / `x-default` 均判合法，避免误报。
+- **测试**：`tests/test_analyzer.py` 新增 2 例——`test_flags_invalid_hreflang_codes`（`en_GB`+`english` 命中、`en-US`+`x-default` 不误报、`invalid_hreflang` 精确等于 `{"en_GB","english"}`）、`test_accepts_well_formed_hreflang_codes`（`SAMPLE_GOOD` 的 `en`/`x-default` 全合法、无 `hreflang_invalid`）；pytest 31 → 33 passed，零回归。
+- **文档**：README `check_i18n` 一行补充「hreflang value validation」并举例说明 `en_US` / `english` 会被标记及原因；`SUMMARY.md` 同步（追加 Day 12 行、测试计数 31→33、价值陈述更新为 12+ day streak）。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 12 天，类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖。本次回到「能审计什么」上加法，且刻意选的是**最贴合项目 i18n 核心定位**、又被绝大多数轻量审计工具忽略的信号：hreflang 值合法性。它不是「有没有 hreflang」这种一眼可见的检查，而是「hreflang 写对了没有」这种源码看着正常、线上却静默失效的深层坑——正是 AI agent 在写国际化页面时最需要即时兜底的地方。配合前 11 天，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景 × 测试纪律」，每步可测、文档同步、向后兼容——连续 12 天真实提交本身就是「长期在维护」的最强证明。

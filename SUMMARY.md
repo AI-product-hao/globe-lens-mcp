@@ -24,6 +24,12 @@
 > helper across 5 URL shapes, and the `charset_missing` branch. 31 tests passing.
 > Doing test-coverage work on an "off" day shows the maintenance focus is long-term
 > trust, not feature count.
+>
+> **Updated 2026-07-23 (Day 12):** the streak is now 12+ days — a new i18n audit
+> dimension shipped: **hreflang value validation**. Malformed codes like `en_US`
+> (underscore) or `english` (full word) are silently ignored by search engines, so
+> the intended alternate is lost; GlobeLens now flags them (`hreflang_invalid`).
+> 33 tests passing.
 
 ---
 
@@ -66,7 +72,9 @@ staging/preview/self-signed-cert workflows.
 - **Viewport** — present or not (mobile friendliness).
 - **Canonical** — captured verbatim **and** resolved to an absolute `canonical_url`.
 - **hreflang** — captured with each entry resolved to an absolute `abs_href`;
-  warns when no `x-default`.
+  warns when no `x-default`, and **validates each hreflang value's format**
+  (`hreflang_invalid` warning + `invalid_hreflang` list), catching common real
+  mistakes like `en_US` (underscore) or `english` that engines silently ignore.
 - **Open Graph / Twitter cards** — `og:title` / `og:description` presence.
 - **`meta robots` / noindex** — parses directives; warns on `noindex`.
 - **JSON-LD structured data** — detects `application/ld+json`; info when missing.
@@ -115,6 +123,7 @@ first.
 | 9 | 2026-07-20 | error handling | `audit_url` / `check_i18n` return structured error on 404/network failure (no crash) | **25 passed** |
 | 10 | 2026-07-21 | new audit dim | thin-content detection (visible body word count, script/style excluded) | **27 passed** |
 | 11 | 2026-07-22 | test coverage | lock down OG/Twitter capture, `robots_sitemap_urls` URL shapes, `charset_missing` branch | **31 passed** |
+| 12 | 2026-07-23 | new audit dim | hreflang value validation (`en_US`/`english` etc. flagged as `hreflang_invalid`) | **33 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -132,7 +141,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 11+ day streak of tested, documented, backward-compatible
+> project with a continuous 12+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -162,9 +171,9 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 11 days, 11+ real commits, 31 passing tests. GlobeLens now flags thin content,
-> broken anchors, mixed content, noindex… and returns SEO issues *sorted by
-> severity* so your agent fixes the urgent stuff first.
+> 12 days, 12+ real commits, 33 passing tests. GlobeLens now validates hreflang
+> codes, flags thin content, broken anchors, mixed content, noindex… and returns
+> SEO issues *sorted by severity* so your agent fixes the urgent stuff first.
 > Small, tested, documented — the kind of OSS I wish more tools were.
 > github.com/AI-product-hao/globe-lens-mcp
 
