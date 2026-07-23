@@ -23,6 +23,24 @@ SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
 # search engines demote). Kept as a module constant so it is easy to tune.
 THIN_CONTENT_MIN_WORDS = 300
 
+# A well-formed hreflang value is an ISO 639-1 language code (2-3 letters),
+# optionally followed by a region: an ISO 3166-1 alpha-2 code (2 letters) or a
+# UN M.49 area code (3 digits), joined by a hyphen. The value is case-insensitive
+# and "x-default" is a reserved keyword. Anything else (e.g. the extremely common
+# "en_US" with an underscore, or a full word like "english") is silently ignored
+# by search engines — so it is worth surfacing to the author.
+_HREFLANG_RE = re.compile(r"^[a-z]{2,3}(-[a-z]{2}|-[0-9]{3})?$", re.IGNORECASE)
+
+
+def _is_valid_hreflang(code: str | None) -> bool:
+    """Return True if `code` is a syntactically valid hreflang value."""
+    if not code:
+        return False
+    code = code.strip()
+    if code.lower() == "x-default":
+        return True
+    return bool(_HREFLANG_RE.match(code))
+
 
 @dataclass
 class Issue:
@@ -70,6 +88,7 @@ class AuditReport:
     canonical: str | None = None
     canonical_url: str | None = None
     hreflang: list[dict[str, str]] = field(default_factory=list)
+    invalid_hreflang: list[str] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
     twitter_tags: dict[str, str] = field(default_factory=dict)
     has_robots_txt: bool | None = None
@@ -197,6 +216,19 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         if "x-default" not in langs:
             report.issues.append(Issue("warning", "hreflang_no_default",
                                         "No x-default hreflang; recommended for international sites."))
+        # Flag malformed hreflang values (e.g. "en_US" with an underscore, or a
+        # full word like "english"). Search engines silently ignore invalid
+        # codes, so the intended alternate is never picked up.
+        report.invalid_hreflang = [
+            h["hreflang"] for h in report.hreflang
+            if not _is_valid_hreflang(h.get("hreflang"))
+        ]
+        if report.invalid_hreflang:
+            report.issues.append(Issue(
+                "warning", "hreflang_invalid",
+                f"Invalid hreflang value(s): {', '.join(report.invalid_hreflang)}; "
+                f"use an ISO language code optionally with a region "
+                f"(e.g. 'en' or 'en-US') or 'x-default'."))
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))

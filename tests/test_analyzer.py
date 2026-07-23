@@ -361,3 +361,32 @@ def test_flags_missing_charset():
     assert "charset_missing" in [i.code for i in r.issues]
 
 
+# --- hreflang value validity (i18n) ---
+# Malformed hreflang codes are one of the most common real i18n mistakes and
+# are silently ignored by search engines, so the intended alternate is lost.
+SAMPLE_HREFLANG_INVALID = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Hreflang Validity Demo</title>
+<link rel="alternate" hreflang="en-US" href="https://example.com/en-us">
+<link rel="alternate" hreflang="en_GB" href="https://example.com/en-gb">
+<link rel="alternate" hreflang="english" href="https://example.com/en">
+<link rel="alternate" hreflang="x-default" href="https://example.com/">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_invalid_hreflang_codes():
+    r = analyze_html(SAMPLE_HREFLANG_INVALID, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "hreflang_invalid" in codes
+    # "en_GB" (underscore) and "english" (full word) are invalid; "en-US" and
+    # "x-default" are valid and must NOT be flagged.
+    assert set(r.invalid_hreflang) == {"en_GB", "english"}
+
+
+def test_accepts_well_formed_hreflang_codes():
+    # SAMPLE_GOOD uses "en" and "x-default", both valid -> no invalid list, no issue
+    r = analyze_html(SAMPLE_GOOD, "https://example.com")
+    assert r.invalid_hreflang == []
+    assert "hreflang_invalid" not in [i.code for i in r.issues]
+
+
