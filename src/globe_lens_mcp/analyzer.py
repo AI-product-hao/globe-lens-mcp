@@ -170,10 +170,26 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                                     "Missing lang attribute on <html>; critical for internationalization."))
 
     # --- charset ---
+    # Two valid ways to declare the charset exist in the wild:
+    #   1. HTML5:  <meta charset="utf-8">
+    #   2. Legacy: <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    # The legacy form is still extremely common on older and non-English sites,
+    # so only accepting form 1 produced a false "charset_missing" warning. We now
+    # honour both and extract the charset value from the http-equiv content.
     meta_charset = soup.find("meta", attrs={"charset": True})
-    if meta_charset:
-        report.charset = meta_charset.get("charset")
+    if meta_charset and meta_charset.get("charset"):
+        report.charset = meta_charset.get("charset").strip()
     else:
+        http_equiv = soup.find(
+            "meta",
+            attrs={"http-equiv": lambda v: v and v.lower() == "content-type"},
+        )
+        content = http_equiv.get("content") if http_equiv else None
+        if content:
+            m = re.search(r"charset\s*=\s*([^\s;]+)", content, re.IGNORECASE)
+            if m:
+                report.charset = m.group(1).strip()
+    if not report.charset:
         report.issues.append(Issue("warning", "charset_missing", "No <meta charset> declared."))
 
     # --- viewport ---

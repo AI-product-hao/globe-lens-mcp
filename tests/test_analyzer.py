@@ -390,3 +390,48 @@ def test_accepts_well_formed_hreflang_codes():
     assert "hreflang_invalid" not in [i.code for i in r.issues]
 
 
+# --- charset via legacy http-equiv Content-Type ---
+# Besides the HTML5 "<meta charset>" form, a huge number of real (older /
+# non-English) pages declare their encoding with the legacy
+# "<meta http-equiv='Content-Type' content='text/html; charset=...'>" form.
+# Only accepting the HTML5 form produced a false "charset_missing" warning, so
+# both are now honoured.
+SAMPLE_HTTP_EQUIV_CHARSET = """<!doctype html>
+<html lang="zh-CN"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=gb2312">
+<title>Legacy Charset Demo Page Title Here</title>
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_reads_charset_from_http_equiv_content_type():
+    r = analyze_html(SAMPLE_HTTP_EQUIV_CHARSET, "https://example.com")
+    # the legacy declaration is honoured and the value is extracted...
+    assert r.charset == "gb2312"
+    # ...so the false "charset_missing" warning is NOT emitted
+    assert "charset_missing" not in [i.code for i in r.issues]
+
+
+def test_html5_charset_still_wins_and_is_read():
+    # the modern form keeps working unchanged
+    html = (
+        '<html lang="en"><head><meta charset="UTF-8">'
+        "<title>Modern Charset Demo Title Long Enough</title></head>"
+        "<body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert r.charset == "UTF-8"
+    assert "charset_missing" not in [i.code for i in r.issues]
+
+
+def test_still_flags_charset_missing_when_neither_form_present():
+    # a page with no charset declaration at all is still flagged
+    html = (
+        '<html lang="en"><head>'
+        "<title>No Charset At All Demo Title Here</title></head>"
+        "<body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert r.charset is None
+    assert "charset_missing" in [i.code for i in r.issues]
+
+
