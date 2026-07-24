@@ -131,3 +131,12 @@
 - **测试**：`tests/test_analyzer.py` 新增 2 例——`test_flags_invalid_hreflang_codes`（`en_GB`+`english` 命中、`en-US`+`x-default` 不误报、`invalid_hreflang` 精确等于 `{"en_GB","english"}`）、`test_accepts_well_formed_hreflang_codes`（`SAMPLE_GOOD` 的 `en`/`x-default` 全合法、无 `hreflang_invalid`）；pytest 31 → 33 passed，零回归。
 - **文档**：README `check_i18n` 一行补充「hreflang value validation」并举例说明 `en_US` / `english` 会被标记及原因；`SUMMARY.md` 同步（追加 Day 12 行、测试计数 31→33、价值陈述更新为 12+ day streak）。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 12 天，类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖。本次回到「能审计什么」上加法，且刻意选的是**最贴合项目 i18n 核心定位**、又被绝大多数轻量审计工具忽略的信号：hreflang 值合法性。它不是「有没有 hreflang」这种一眼可见的检查，而是「hreflang 写对了没有」这种源码看着正常、线上却静默失效的深层坑——正是 AI agent 在写国际化页面时最需要即时兜底的地方。配合前 11 天，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景 × 测试纪律」，每步可测、文档同步、向后兼容——连续 12 天真实提交本身就是「长期在维护」的最强证明。
+
+## Day 13 — 2026-07-24（持续维护，Day 12 之后的第 1 天）
+- **改动类型：边界 bug 修复 / 消除假阴性（与 Day 12「新增审计维度」不同类，满足避免连续同类规则）**。GlobeLens 的 charset 检测此前只认 HTML5 的 `<meta charset="utf-8">` 一种写法，却漏掉了同样合法、且在**老站与非英文站极其常见**的传统写法 `<meta http-equiv="Content-Type" content="text/html; charset=gb2312">`。结果这类页面明明声明了字符集，却被 GlobeLens 误报 `charset_missing`——这是一个真实的**假阴性**：工具冤枉了本来正确的页面，会误导 AI agent 去「修」一个不存在的问题。
+  - `analyzer.py` charset 分支改为**同时接受两种写法**：优先 `<meta charset>`；缺失时回退查找 `http-equiv="Content-Type"`（大小写不敏感），并用正则 `charset\s*=\s*([^\s;]+)` 从其 `content` 中抽出字符集值写入 `report.charset`。仅当两种写法都无、`report.charset` 仍为空时才发 `charset_missing` warning。
+  - 纯 HTML、零网络、非破坏性：不新增字段、不改既有 `to_dict`；HTML5 写法路径行为完全不变（向后兼容）。
+- **测试**：`tests/test_analyzer.py` 新增 3 例——`test_reads_charset_from_http_equiv_content_type`（传统写法被识别、`charset=="gb2312"`、不再误报）、`test_html5_charset_still_wins_and_is_read`（HTML5 写法照常工作、`charset=="UTF-8"`）、`test_still_flags_charset_missing_when_neither_form_present`（两种都无时仍正确告警）。pytest 33 → 36 passed，零回归。
+- **文档**：README「Robust by design」一节补充「charset 检测同时接受 HTML5 与 legacy http-equiv 两种写法，老站/非英文站不再被误报缺失 charset」。
+- **测试结果**：`pytest -q` → 36 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 13 天。本次修的是一个**真实假阴性**——不是加新功能，而是让既有检测「不冤枉正确的页面」。审计工具最伤信任的就是误报：一旦 agent 发现工具对合法页面报错，就会不再相信它的所有结论。GlobeLens 主动覆盖 HTML 规范里两种并存的 charset 写法（HTML5 + legacy http-equiv），正是「把工具做得经得起真实世界五花八门的写法」这一成熟维护心态的体现，且改动可测、文档同步、向后兼容。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12、工具参数 D2、健壮性 D4/D6/D13、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 13 天真实提交，「长期在维护」的证据链持续变厚。
