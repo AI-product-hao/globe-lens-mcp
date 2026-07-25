@@ -17,6 +17,7 @@
 - Day 11：2026-07-22 完成（见下；测试覆盖加固，OG/Twitter/robots_sitemap_urls/charset 分支，11+ 天持续活跃）。
 - Day 12：2026-07-23 完成（见下；hreflang 值格式校验新维度，12+ 天持续活跃）。
 - Day 13：2026-07-24 完成（见下；边界 bug 修复：charset 检测兼容 legacy http-equiv 写法，消除假阴性，13+ 天持续活跃）。
+- Day 14：2026-07-26 完成（见下；自引用 hreflang 检测新维度，14+ 天持续活跃）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -114,6 +115,14 @@
 - 测试：新增 3 例（legacy 写法识别=gb2312、HTML5 写法照常=UTF-8、两种皆无仍告警）；pytest 33 → 36 passed，零回归。
 - Commit：8c185e5 (fix) + 29c9cac (docs PROGRESS/SUMMARY)。
 - 下一步（Day 14）：避开「健壮性」；候选：README 真实示例增强 / 改进 Issue 文案与严重级别 / 补充测试覆盖（mixed_content 边界、broken_anchors name 属性）/ 或新的不同类小改进。
+
+## Day 14 — 2026-07-26
+- 改动类型：新增审计维度（自引用 hreflang；与 Day 13「边界修复」不同类）。
+- 内容：analyzer.py 新增 `_self_ref_key()` URL 归一化 helper（scheme/host 小写、path 去尾斜杠、含 query）+ `hreflang_self_ref: bool | None` 字段（None=无 hreflang 不适用）；基于 abs_href 比较，缺自引用发 `hreflang_no_self_ref` warning；server.py check_i18n 返回透出该字段（issue 过滤器按 hreflang 前缀自动带出新告警）。
+- 测试：新增 4 例（缺自引用命中、尾斜杠归一化不误报、相对 href+大写 host 命中、无 hreflang 时 None）；pytest 36 → 40 passed，零回归。
+- Commit：feat(i18n) + docs（PROGRESS/SUMMARY/README）。
+- 注意：SAMPLE_RELATIVE 深路径页面现在会多一条 hreflang_no_self_ref warning（该测试不断言 issues/score，无影响）。
+- 下一步（Day 15）：避开「新增审计维度」；候选：README 真实示例增强 / 改进 Issue 文案与严重级别 / 补充测试覆盖（mixed_content 边界、broken_anchors name 属性、check_i18n 透传 hreflang_self_ref 的 server 层断言）/ 解析层新边界。
 
 ## Day 5 — 2026-07-16
 - 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。

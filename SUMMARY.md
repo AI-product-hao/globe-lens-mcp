@@ -36,6 +36,13 @@
 > legacy `<meta http-equiv="Content-Type" content="…; charset=…">` form, so older /
 > non-English pages that *did* declare a charset are no longer wrongly flagged
 > `charset_missing`. 36 tests passing.
+>
+> **Updated 2026-07-26 (Day 14):** the streak is now 14+ days — a new i18n audit
+> dimension shipped: **self-referencing hreflang detection**. Google requires every
+> page in an hreflang cluster to list *itself* as an alternate; when the self-link
+> is missing the whole set may be silently ignored. GlobeLens compares resolved,
+> normalized URLs (trailing slash / host case insensitive) and reports
+> `hreflang_self_ref` + a `hreflang_no_self_ref` warning. 40 tests passing.
 
 ---
 
@@ -80,7 +87,9 @@ staging/preview/self-signed-cert workflows.
 - **Canonical** — captured verbatim **and** resolved to an absolute `canonical_url`.
 - **hreflang** — captured with each entry resolved to an absolute `abs_href`;
   warns when no `x-default`, and **validates each hreflang value's format**
-  (`hreflang_invalid` warning + `invalid_hreflang` list), catching common real
+  (`hreflang_invalid` warning + `invalid_hreflang` list) **and the
+  self-referencing rule** (`hreflang_self_ref` field + `hreflang_no_self_ref`
+  warning when the cluster does not list the page itself), catching common real
   mistakes like `en_US` (underscore) or `english` that engines silently ignore.
 - **Open Graph / Twitter cards** — `og:title` / `og:description` presence.
 - **`meta robots` / noindex** — parses directives; warns on `noindex`.
@@ -132,6 +141,7 @@ first.
 | 11 | 2026-07-22 | test coverage | lock down OG/Twitter capture, `robots_sitemap_urls` URL shapes, `charset_missing` branch | **31 passed** |
 | 12 | 2026-07-23 | new audit dim | hreflang value validation (`en_US`/`english` etc. flagged as `hreflang_invalid`) | **33 passed** |
 | 13 | 2026-07-24 | robustness | accept legacy `http-equiv` Content-Type charset form (kill false `charset_missing`) | **36 passed** |
+| 14 | 2026-07-26 | new audit dim | self-referencing hreflang check (`hreflang_self_ref` + `hreflang_no_self_ref` warning) | **40 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -149,7 +159,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 13+ day streak of tested, documented, backward-compatible
+> project with a continuous 14+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us

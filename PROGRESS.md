@@ -140,3 +140,15 @@
 - **文档**：README「Robust by design」一节补充「charset 检测同时接受 HTML5 与 legacy http-equiv 两种写法，老站/非英文站不再被误报缺失 charset」。
 - **测试结果**：`pytest -q` → 36 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 13 天。本次修的是一个**真实假阴性**——不是加新功能，而是让既有检测「不冤枉正确的页面」。审计工具最伤信任的就是误报：一旦 agent 发现工具对合法页面报错，就会不再相信它的所有结论。GlobeLens 主动覆盖 HTML 规范里两种并存的 charset 写法（HTML5 + legacy http-equiv），正是「把工具做得经得起真实世界五花八门的写法」这一成熟维护心态的体现，且改动可测、文档同步、向后兼容。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12、工具参数 D2、健壮性 D4/D6/D13、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 13 天真实提交，「长期在维护」的证据链持续变厚。
+
+## Day 14 — 2026-07-26（持续维护，Day 13 之后的第 1 天）
+- **改动类型：新增审计维度（自引用 hreflang 检测；与 Day 13「边界 bug 修复」不同类，满足避免连续同类规则）**。Google 官方要求：hreflang 集群中的**每个页面都必须把自己也列为 alternate 之一**（self-referencing hreflang）；缺失自引用时，搜索引擎可能**静默忽略整个 hreflang 集群**——这是手工维护多语言站点时最高频、最隐蔽的真实错误之一：站长把 de/fr/es 都列全了，唯独忘了当前页面自己，源码看着一切正常，线上多语言映射却整体失效。本次把这一维度补齐（纯 HTML、零网络、可单测，正中项目 i18n 核心定位）：
+  - `analyzer.py` 新增 `_self_ref_key(u)` helper：把 URL 归一化为 `(scheme小写, host小写, path去尾斜杠, query)` 四元组再比较——`https://example.com` 与 `https://example.com/` 视为同一页面，host 大小写不敏感，避免因写法差异误报。
+  - `AuditReport` 新增字段 `hreflang_self_ref: bool | None`（`None` = 页面无 hreflang、检查不适用；`True`/`False` = 集群是否引用了页面自身），向后兼容、不影响既有 `to_dict`。
+  - 比较基于每个 hreflang 条目**已解析的绝对地址** `abs_href`（复用 Day 4 的相对 URL 绝对化成果），相对写法 `href="/en"` 也能正确命中自引用。
+  - 缺失自引用时给出 `hreflang_no_self_ref` warning，消息直接说明 Google 的要求与后果，agent 拿到即可补一条 `<link rel="alternate" hreflang="…" href="本页">`。
+  - `server.py` 的 `check_i18n` 返回增加 `hreflang_self_ref` 字段；其 issue 过滤器本就按 `hreflang` 前缀匹配，新告警自动透出，零额外改动。
+- **测试**：`tests/test_analyzer.py` 新增 4 例——`test_flags_missing_hreflang_self_reference`（/en 页面只列 de/fr → `False` + 告警）、`test_accepts_self_referencing_hreflang_with_normalization`（无尾斜杠页面 vs 带尾斜杠 x-default → 归一化命中、不误报）、`test_self_ref_resolves_relative_hreflang_and_host_case`（相对 `href="/en"` + 大写 host 均正确识别）、`test_self_ref_not_applicable_without_hreflang`（无 hreflang → `None`、永不误发）；pytest 36 → 40 passed，零回归。
+- **文档**：README `check_i18n` 一节补充 self-referencing hreflang 规则说明；`SUMMARY.md` 同步（追加 Day 14 行、测试计数 36→40、价值陈述更新为 14+ day streak）。
+- **测试结果**：`pytest -q` → 40 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 14 天（两周整）。本次选的是**最贴合项目 i18n 定位、且被几乎所有轻量审计工具忽略**的信号：自引用 hreflang 不是「有没有写 hreflang」这种表层检查，而是 Google 文档明文要求、缺失即整簇失效的深层规则——正是 AI agent 在生成多语言页面时最容易犯、又最需要即时兜底的错误。实现上刻意做了 URL 归一化（尾斜杠/大小写/相对路径），并用 4 个正反例测试把「什么算自引用」的边界钉死，避免误报伤害工具信任。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性 D4/D6/D13、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 14 天真实提交，「长期在维护」的证据链持续变厚。
