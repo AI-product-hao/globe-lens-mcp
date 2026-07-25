@@ -42,6 +42,18 @@ def _is_valid_hreflang(code: str | None) -> bool:
     return bool(_HREFLANG_RE.match(code))
 
 
+def _self_ref_key(u: str) -> tuple[str, str, str, str]:
+    """Normalize a URL for self-reference comparison.
+
+    Scheme/host are case-insensitive and a trailing slash on the path is not
+    significant ("https://example.com" == "https://example.com/"), so we
+    compare on a normalized tuple instead of raw string equality.
+    """
+    p = urlparse(u)
+    path = p.path.rstrip("/") or "/"
+    return (p.scheme.lower(), p.netloc.lower(), path, p.query)
+
+
 @dataclass
 class Issue:
     severity: str  # "error" | "warning" | "info"
@@ -89,6 +101,9 @@ class AuditReport:
     canonical_url: str | None = None
     hreflang: list[dict[str, str]] = field(default_factory=list)
     invalid_hreflang: list[str] = field(default_factory=list)
+    # None = page has no hreflang links (check not applicable);
+    # True/False = whether the hreflang set references the page itself.
+    hreflang_self_ref: bool | None = None
     og_tags: dict[str, str] = field(default_factory=dict)
     twitter_tags: dict[str, str] = field(default_factory=dict)
     has_robots_txt: bool | None = None
@@ -245,6 +260,23 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 f"Invalid hreflang value(s): {', '.join(report.invalid_hreflang)}; "
                 f"use an ISO language code optionally with a region "
                 f"(e.g. 'en' or 'en-US') or 'x-default'."))
+        # Self-referencing hreflang: Google requires every page in an hreflang
+        # cluster to also list *itself* as one of the alternates. When the
+        # self-reference is missing, search engines may ignore the whole set —
+        # a silent failure that is very common on hand-maintained i18n sites.
+        # Compare on normalized URLs (case-insensitive host, trailing slash
+        # insensitive) using each entry's resolved absolute href.
+        page_key = _self_ref_key(url)
+        report.hreflang_self_ref = any(
+            _self_ref_key(h.get("abs_href") or h.get("href") or "") == page_key
+            for h in report.hreflang
+        )
+        if not report.hreflang_self_ref:
+            report.issues.append(Issue(
+                "warning", "hreflang_no_self_ref",
+                "hreflang set does not reference this page itself; Google "
+                "requires a self-referencing hreflang link, otherwise the "
+                "whole cluster may be ignored."))
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))

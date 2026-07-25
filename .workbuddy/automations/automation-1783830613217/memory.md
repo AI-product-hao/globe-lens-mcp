@@ -15,6 +15,8 @@
 - Day 9：2026-07-20 完成（见下；错误处理健壮性，证明长期精修）。
 - Day 10：2026-07-21 完成（见下；thin-content 新审计维度，10+ 天持续活跃）。
 - Day 11：2026-07-22 完成（见下；测试覆盖加固，OG/Twitter/robots_sitemap_urls/charset 分支，11+ 天持续活跃）。
+- Day 12：2026-07-23 完成（见下；hreflang 值格式校验新维度，12+ 天持续活跃）。
+- Day 13：2026-07-24 完成（见下；边界 bug 修复：charset 检测兼容 legacy http-equiv 写法，消除假阴性，13+ 天持续活跃）。
 
 ## Day 1 — 2026-07-12
 - 改动类型：新增审计维度（on-page 结构 / 可访问性）。
@@ -96,6 +98,22 @@
 - 测试：pytest 27 → 31 passed；纯新增、零功能改动、零回归。
 - Commit：3aab0e5 (test) + df4bac4 (docs/PROGRESS/SUMMARY)。
 - 下一步（Day 12）：避开「测试覆盖」以保多样性；候选：README 真实示例增强 / 解析层新边界（非 UTF-8 的 HTML 内 <meta charset> 二次校准、超大标签数量上限）/ 改进 Issue 文案与严重级别 / 新的不同类小改进（如 locale 一致性、sitemap/robots 解析）。
+
+## Day 12 — 2026-07-23（持续维护，Day 11 之后第 1 天）
+- 改动类型：新增审计维度（hreflang 值格式校验；与 Day 11「测试覆盖」不同类，满足避免连续同类规则）。
+- 内容：analyzer.py 新增 `_HREFLANG_RE`（`^[a-z]{2,3}(-[a-z]{2}|-[0-9]{3})?$`，忽略大小写）+ `_is_valid_hreflang()` helper（x-default 特判）；新增 `invalid_hreflang: list[str]` 字段；hreflang 分支内收集非法值并给 `hreflang_invalid` warning。精准命中 en_US（下划线）、english（全词）、en-USA（3字母区），合法接受 en/en-US/zh-CN/es-419/x-default。
+- 测试：新增 2 例（test_flags_invalid_hreflang_codes、test_accepts_well_formed_hreflang_codes）；pytest 31 → 33 passed，零回归。
+- Commit：fd004d9 (feat) + facb5af (docs README/PROGRESS/SUMMARY)。
+- 类别轮换健康（新维度 D1/D3/D5/D8/D10/D12、工具参数 D2、健壮性 D4/D6、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖。
+- 下一步（Day 13）：避开「新增审计维度」；候选：README 真实示例增强 / 解析层新边界（非 UTF-8 内 <meta charset> 二次校准、超大标签数量上限）/ 改进 Issue 文案与严重级别 / 补充测试覆盖（如 mixed_content 边界、broken_anchors name 属性）。
+
+## Day 13 — 2026-07-24
+- 改动类型：边界 bug 修复 / 消除假阴性（与 Day 12「新增审计维度」不同类）。
+- 内容：analyzer.py charset 分支此前只认 HTML5 `<meta charset>`，漏掉 legacy `<meta http-equiv="Content-Type" content="…; charset=…">`，导致老站/非英文站被误报 `charset_missing`。改为两种写法都接受：优先 charset 属性，缺失时回退 http-equiv（大小写不敏感）并用正则 `charset\s*=\s*([^\s;]+)` 抽值；仅当仍为空才告警。README「Robust by design」同步。
+- 教训/坑：一开始误以为 `<title>` 用 `.string` 遇嵌套标签会返回 None（想改 get_text 修复），实测 Python html.parser 把 title 当 RCDATA、`.string` 本就返回完整文本 → 那是空提交，已撤销，改做真实的 charset 假阴性修复。get_text 若用默认分隔符会把相邻文本节点拼没空格，需 `get_text(" ", strip=True)`（本次未采用）。
+- 测试：新增 3 例（legacy 写法识别=gb2312、HTML5 写法照常=UTF-8、两种皆无仍告警）；pytest 33 → 36 passed，零回归。
+- Commit：8c185e5 (fix) + 29c9cac (docs PROGRESS/SUMMARY)。
+- 下一步（Day 14）：避开「健壮性」；候选：README 真实示例增强 / 改进 Issue 文案与严重级别 / 补充测试覆盖（mixed_content 边界、broken_anchors name 属性）/ 或新的不同类小改进。
 
 ## Day 5 — 2026-07-16
 - 改动类型：新增审计维度（混合内容 mixed content 检测；与 Day 4「边界健壮性」不同类，满足避免连续同类规则）。

@@ -435,3 +435,53 @@ def test_still_flags_charset_missing_when_neither_form_present():
     assert "charset_missing" in [i.code for i in r.issues]
 
 
+# --- self-referencing hreflang (i18n) ---
+# Google requires every page in an hreflang cluster to also list *itself* as an
+# alternate. A missing self-reference can make search engines ignore the whole
+# set — a silent, very common failure on hand-maintained i18n sites.
+SAMPLE_NO_SELF_REF = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Self Reference Demo Page Title Here</title>
+<link rel="alternate" hreflang="de" href="https://example.com/de">
+<link rel="alternate" hreflang="fr" href="https://example.com/fr">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_missing_hreflang_self_reference():
+    # page is /en but the hreflang set only lists /de and /fr -> flagged
+    r = analyze_html(SAMPLE_NO_SELF_REF, "https://example.com/en")
+    assert r.hreflang_self_ref is False
+    assert "hreflang_no_self_ref" in [i.code for i in r.issues]
+
+
+def test_accepts_self_referencing_hreflang_with_normalization():
+    # SAMPLE_GOOD is audited at "https://example.com" (no trailing slash) and
+    # its x-default alternate points to "https://example.com/" (with slash) —
+    # normalization must treat these as the same page, so no false positive.
+    r = analyze_html(SAMPLE_GOOD, "https://example.com")
+    assert r.hreflang_self_ref is True
+    assert "hreflang_no_self_ref" not in [i.code for i in r.issues]
+
+
+def test_self_ref_resolves_relative_hreflang_and_host_case():
+    # a *relative* self-referencing alternate and a differently-cased host must
+    # both be recognized (compare on resolved, normalized URLs)
+    html = (
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>Relative Self Reference Demo Title</title>"
+        '<link rel="alternate" hreflang="en" href="/en">'
+        '<link rel="alternate" hreflang="de" href="/de">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://EXAMPLE.com/en")
+    assert r.hreflang_self_ref is True
+    assert "hreflang_no_self_ref" not in [i.code for i in r.issues]
+
+
+def test_self_ref_not_applicable_without_hreflang():
+    # pages with no hreflang at all: the check is N/A (None), never flagged
+    r = analyze_html(SAMPLE_BAD, "https://example.com")
+    assert r.hreflang_self_ref is None
+    assert "hreflang_no_self_ref" not in [i.code for i in r.issues]
+
+

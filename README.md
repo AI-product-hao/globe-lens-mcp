@@ -30,7 +30,12 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`,
   and **hreflang value validation** — malformed codes like `en_US` (underscore
   instead of hyphen) or `english` are flagged, since search engines silently
-  ignore them and the intended alternate is lost.
+  ignore them and the intended alternate is lost. Also checks the
+  **self-referencing hreflang** rule: Google requires every page in an hreflang
+  cluster to list *itself* as an alternate, otherwise the whole set may be
+  ignored — GlobeLens compares resolved, normalized URLs (trailing slash and
+  host case insensitive) and reports `hreflang_self_ref` plus a
+  `hreflang_no_self_ref` warning when the self-link is missing.
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
   **absolute URLs** (so an agent can act on them directly), and empty / malformed

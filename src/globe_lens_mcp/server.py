@@ -154,6 +154,7 @@ async def check_i18n(
             "url": url,
             "html_lang": report.html_lang,
             "hreflang": report.hreflang,
+            "hreflang_self_ref": report.hreflang_self_ref,
             "issues": issues,
             "score": report.score,
             "truncated": truncated,
