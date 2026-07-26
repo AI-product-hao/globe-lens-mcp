@@ -69,6 +69,10 @@ async def audit_url(
     robots.txt / sitemap.xml presence. Returns a structured report with a 0-100
     score and prioritized issues.
 
+    Redirects are followed; the report is computed against the final URL and
+    includes final_url / redirected fields so the agent knows exactly which
+    page was analyzed.
+
     Args:
         url: The page to audit.
         timeout: Request timeout in seconds (default 20).
@@ -96,9 +100,17 @@ async def audit_url(
                 f"HTTP {e.response.status_code} returned by {url}.")
         except httpx.HTTPError as e:
             return _http_error_result(url, None, f"Request to {url} failed: {e}")
+        # Redirects are followed (http -> https, apex -> www, / -> /en/ ...),
+        # so the body we analyze belongs to the *final* URL, not the requested
+        # one. Analyzing against the requested URL would resolve relative
+        # canonical/hreflang links against the wrong base, break the
+        # self-referencing hreflang check, and probe robots.txt/sitemap.xml on
+        # the wrong origin after a cross-host redirect.
+        final_url = str(resp.url)
+        redirected = bool(resp.history)
         text, truncated = _decode_response(resp)
-        report = analyze_html(text, url, truncated=truncated)
-        robots_url, sitemap_url = robots_sitemap_urls(url)
+        report = analyze_html(text, final_url, truncated=truncated)
+        robots_url, sitemap_url = robots_sitemap_urls(final_url)
         try:
             r = await client.get(robots_url)
             report.has_robots_txt = r.status_code == 200
@@ -109,7 +121,11 @@ async def audit_url(
             report.has_sitemap = s.status_code == 200
         except Exception:
             report.has_sitemap = None
-        return report.to_dict()
+        out = report.to_dict()
+        out["url"] = url  # what the caller asked for, kept for traceability
+        out["final_url"] = final_url
+        out["redirected"] = redirected
+        return out
 
 
 @mcp.tool()
@@ -146,12 +162,19 @@ async def check_i18n(
                 f"HTTP {e.response.status_code} returned by {url}.")
         except httpx.HTTPError as e:
             return _http_error_result(url, None, f"Request to {url} failed: {e}")
+        # Same as audit_url: analyze against the final (post-redirect) URL so
+        # relative hreflang hrefs and the self-reference check use the page
+        # the body actually came from.
+        final_url = str(resp.url)
+        redirected = bool(resp.history)
         text, truncated = _decode_response(resp)
-        report = analyze_html(text, url, truncated=truncated)
+        report = analyze_html(text, final_url, truncated=truncated)
         issues = [asdict(i) for i in report.issues
                   if i.code.startswith("hreflang") or i.code == "lang_missing"]
         return {
             "url": url,
+            "final_url": final_url,
+            "redirected": redirected,
             "html_lang": report.html_lang,
             "hreflang": report.hreflang,
             "hreflang_self_ref": report.hreflang_self_ref,

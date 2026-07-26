@@ -224,3 +224,82 @@ def test_check_i18n_returns_structured_error_on_404():
     assert result["ok"] is False
     assert result["status_code"] == 404
     assert "error" in result
+
+
+# ---------------------------------------------------------------------------
+# Redirect handling: analyze against the FINAL url, not the requested one.
+# ---------------------------------------------------------------------------
+
+REDIRECT_PAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>English Home</title>
+<link rel="canonical" href="/en/">
+<link rel="alternate" hreflang="en" href="/en/">
+<link rel="alternate" hreflang="de" href="/de/">
+</head><body><h1>Hello</h1></body></html>"""
+
+
+def _redirecting_transport(requests_seen: list):
+    """example.com/old -> 301 -> example.com/en/ ; robots/sitemap 404."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests_seen.append(str(request.url))
+        if request.url.path == "/old":
+            return httpx.Response(301, headers={"location": "https://example.com/en/"})
+        if request.url.path == "/en/":
+            return httpx.Response(200, text=REDIRECT_PAGE)
+        return httpx.Response(404)
+
+    return httpx.MockTransport(handler)
+
+
+def test_audit_url_analyzes_against_final_url_after_redirect():
+    # The body belongs to /en/ (the final URL). Relative canonical/hreflang
+    # must resolve against it, and the self-referencing hreflang check must
+    # pass — comparing against the *requested* /old would wrongly fail it.
+    seen: list = []
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_redirecting_transport(seen), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com/old"))
+
+    assert result["url"] == "https://example.com/old"  # what the caller asked
+    assert result["final_url"] == "https://example.com/en/"
+    assert result["redirected"] is True
+    assert result["canonical_url"] == "https://example.com/en/"
+    assert result["hreflang_self_ref"] is True
+    codes = [i["code"] for i in result["issues"]]
+    assert "hreflang_no_self_ref" not in codes
+
+
+def test_audit_url_reports_no_redirect_for_direct_hit():
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, text=SAMPLE)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com"))
+
+    assert result["redirected"] is False
+    assert result["final_url"] == "https://example.com"
+
+
+def test_check_i18n_exposes_final_url_after_redirect():
+    seen: list = []
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_redirecting_transport(seen), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com/old"))
+
+    assert result["url"] == "https://example.com/old"
+    assert result["final_url"] == "https://example.com/en/"
+    assert result["redirected"] is True
+    assert result["hreflang_self_ref"] is True
+    codes = [i["code"] for i in result["issues"]]
+    assert "hreflang_no_self_ref" not in codes

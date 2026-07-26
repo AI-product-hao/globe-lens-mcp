@@ -48,7 +48,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   audits stay fast and bounded. When a target is unreachable, `audit_url` and
   `check_i18n` return a **structured error** (`{"ok": false, "status_code": …,
   "error": …}`) instead of throwing — so the agent can retry / report / skip
-  rather than lose the whole tool call.
+  rather than lose the whole tool call. **Redirects are followed and the report
+  is computed against the final URL** (relative canonical/hreflang resolution,
+  the self-referencing hreflang check, and robots.txt/sitemap.xml probing all
+  use the page you actually landed on); `final_url` and `redirected` fields
+  tell the agent exactly which page was analyzed.
 
 ## Install
 
