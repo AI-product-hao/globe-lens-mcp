@@ -43,6 +43,13 @@
 > is missing the whole set may be silently ignored. GlobeLens compares resolved,
 > normalized URLs (trailing slash / host case insensitive) and reports
 > `hreflang_self_ref` + a `hreflang_no_self_ref` warning. 40 tests passing.
+>
+> **Updated 2026-07-26 (Day 15):** the streak is now 15+ days — a real redirect
+> bug fixed: the client followed redirects but analysis still used the *requested*
+> URL as base, mis-resolving relative canonical/hreflang, falsely failing the
+> brand-new self-reference check, and probing robots/sitemap on the wrong origin
+> after cross-host redirects. Analysis now runs against the **final URL**, and
+> both tools expose `final_url` / `redirected` for traceability. 43 tests passing.
 
 ---
 
@@ -142,6 +149,7 @@ first.
 | 12 | 2026-07-23 | new audit dim | hreflang value validation (`en_US`/`english` etc. flagged as `hreflang_invalid`) | **33 passed** |
 | 13 | 2026-07-24 | robustness | accept legacy `http-equiv` Content-Type charset form (kill false `charset_missing`) | **36 passed** |
 | 14 | 2026-07-26 | new audit dim | self-referencing hreflang check (`hreflang_self_ref` + `hreflang_no_self_ref` warning) | **40 passed** |
+| 15 | 2026-07-26 | bug fix | analyze against the **final URL** after redirects; expose `final_url` / `redirected` | **43 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -159,7 +167,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 14+ day streak of tested, documented, backward-compatible
+> project with a continuous 15+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us

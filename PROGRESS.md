@@ -152,3 +152,13 @@
 - **文档**：README `check_i18n` 一节补充 self-referencing hreflang 规则说明；`SUMMARY.md` 同步（追加 Day 14 行、测试计数 36→40、价值陈述更新为 14+ day streak）。
 - **测试结果**：`pytest -q` → 40 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 14 天（两周整）。本次选的是**最贴合项目 i18n 定位、且被几乎所有轻量审计工具忽略**的信号：自引用 hreflang 不是「有没有写 hreflang」这种表层检查，而是 Google 文档明文要求、缺失即整簇失效的深层规则——正是 AI agent 在生成多语言页面时最容易犯、又最需要即时兜底的错误。实现上刻意做了 URL 归一化（尾斜杠/大小写/相对路径），并用 4 个正反例测试把「什么算自引用」的边界钉死，避免误报伤害工具信任。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性 D4/D6/D13、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 14 天真实提交，「长期在维护」的证据链持续变厚。
+
+## Day 15 — 2026-07-26（持续维护，Day 14 之后的第 1 天）
+- **改动类型：边界 bug 修复（重定向后的分析基准错误；与 Day 14「新增审计维度」不同类，满足避免连续同类规则）**。GlobeLens 的 HTTP 客户端一直开着 `follow_redirects=True`，但 `audit_url` / `check_i18n` 分析时仍把**请求 URL**（而非重定向后的**最终 URL**）当作页面基准。真实世界几乎每个站都有重定向（http→https、裸域→www、`/`→`/en/` 语言跳转），这个不匹配会造成三类静默错误：
+  - 相对 `canonical` / `hreflang` 链接被 `urljoin` 到**错误的基准页**，产出错误的绝对地址；
+  - Day 14 刚上线的**自引用 hreflang 检测被误报**：body 属于 `/en/`，却拿 `/old` 当「本页」比对，合法页面被判缺自引用——正是 Day 13 强调过的「误报最伤工具信任」；
+  - 跨域重定向后 `robots.txt` / `sitemap.xml` 探测打到**旧主机**上，结果无意义。
+- **修复**：`audit_url` / `check_i18n` 改用 `str(resp.url)` 作为分析与 robots/sitemap 推导基准；返回新增 `final_url`（实际分析的页面）与 `redirected`（bool，基于 `resp.history`）两个字段；`url` 字段仍回显调用方原始输入（向后兼容，既有断言不受影响）。工具 docstring 与 README「Robust by design」同步说明。
+- **测试**：`tests/test_server.py` 新增 3 例——`test_audit_url_analyzes_against_final_url_after_redirect`（301 链：`/old`→`/en/`，断言 `final_url`/`redirected`/`canonical_url` 按最终页解析、`hreflang_self_ref is True` 且无 `hreflang_no_self_ref` 误报）、`test_audit_url_reports_no_redirect_for_direct_hit`（直连时 `redirected is False`）、`test_check_i18n_exposes_final_url_after_redirect`（check_i18n 同样透出并正确判定）。pytest 40 → 43 passed，零回归。
+- **测试结果**：`pytest -q` → 43 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 15 天。本次是一个**只有真实使用才暴露得出来的 bug**：单看代码「跟随重定向」和「解析相对链接」各自都对，组合起来却在几乎所有生产站点上产出错误结论——而且它直接侵蚀前一天刚交付的自引用检测的可信度。当天发现、当天修复、当天用 301 链单测钉死，同时把 `final_url`/`redirected` 透给 agent（审计结论对应哪个页面从此可追溯）。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性/边界修复 D4/D6/D13/D15、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 15 天真实提交，「长期在维护 + 会自我纠错」的证据链持续变厚。
