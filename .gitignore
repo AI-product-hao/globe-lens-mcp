@@ -21,3 +21,6 @@ env/
 # Editor
 .idea/
 .vscode/
+
+# Workspace / agent memory (private — never publish)
+.workbuddy/
