@@ -162,3 +162,13 @@
 - **测试**：`tests/test_server.py` 新增 3 例——`test_audit_url_analyzes_against_final_url_after_redirect`（301 链：`/old`→`/en/`，断言 `final_url`/`redirected`/`canonical_url` 按最终页解析、`hreflang_self_ref is True` 且无 `hreflang_no_self_ref` 误报）、`test_audit_url_reports_no_redirect_for_direct_hit`（直连时 `redirected is False`）、`test_check_i18n_exposes_final_url_after_redirect`（check_i18n 同样透出并正确判定）。pytest 40 → 43 passed，零回归。
 - **测试结果**：`pytest -q` → 43 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 15 天。本次是一个**只有真实使用才暴露得出来的 bug**：单看代码「跟随重定向」和「解析相对链接」各自都对，组合起来却在几乎所有生产站点上产出错误结论——而且它直接侵蚀前一天刚交付的自引用检测的可信度。当天发现、当天修复、当天用 301 链单测钉死，同时把 `final_url`/`redirected` 透给 agent（审计结论对应哪个页面从此可追溯）。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性/边界修复 D4/D6/D13/D15、严重级别 D7、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 15 天真实提交，「长期在维护 + 会自我纠错」的证据链持续变厚。
+
+## Day 16 — 2026-07-27（持续维护，Day 15 之后的第 1 天）
+- **改动类型：改进 Issue 文案 / 输出可用性（给每条 issue 附带可执行修复提示；与 Day 15「边界 bug 修复」不同类，满足避免连续同类规则；上次同类是 Day 7 的严重级别排序，间隔充分）**。此前每条 issue 只说「哪里错了」（message），不说「怎么修」——agent 或人拿到 `hreflang_no_default` 还得先去查规则才能动手。本次把「怎么修」做成机器可读字段：
+  - `analyzer.py` 新增模块级 `FIX_HINTS: dict[str, str]` 表——**24 个 issue code 全覆盖**，每条是具体、可直接照抄的修复动作（如 `charset_missing` → `Add <meta charset="utf-8"> as the first element inside <head>.`；`hreflang_no_default` → 给出完整 `<link rel="alternate" hreflang="x-default" ...>` 写法），而不是把问题换句话再说一遍。
+  - `Issue` 新增 `fix: str = ""` 字段，`__post_init__` 按 `code` 自动从表中填充：显式传入的 fix 优先；未知 code 优雅降级为空串。对 `to_dict()` 纯增量、向后兼容，不影响任何既有字段与排序。
+  - **防漂移守护**：新增一个「源码锁表」测试——用正则扫描 analyzer 源码里所有 `Issue(...)` 的 code，断言每个都在 `FIX_HINTS` 中。未来任何人新增审计维度却忘了配修复提示，测试套件直接红——message 与 fix 永不脱节。
+- **测试**：`tests/test_analyzer.py` 新增 3 例——`test_every_emitted_issue_carries_actionable_fix_hint`（所有产出 issue 的 fix 非空、不等于 message 原文、且在 `to_dict()` 序列化后仍在；空 HTML 降级路径同样带 fix）、`test_fix_hints_cover_every_issue_code_in_analyzer`（源码锁表）、`test_explicit_fix_overrides_lookup_and_unknown_code_is_empty`（显式覆盖优先 + 未知 code 降级）。pytest 43 → 46 passed，零回归。
+- **文档**：README Features 补「actionable `fix` hint」说明；Example JSON 增加 `"fix"` 字段与真实返回一致。
+- **测试结果**：`pytest -q` → 46 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 16 天。本次改的是**输出最后一公里**：审计工具的价值不在「报了多少问题」，而在「拿到报告能不能直接动手」。message + fix 的分离让 agent 无需二次检索规则即可修复——这正是「给 AI agent 用的审计工具」这一定位的字面兑现。工程上用单一事实来源表 + 源码锁表测试保证 24 个 code 的修复提示永不缺失、永不漂移，延续「每改必测、文档同步、向后兼容」的纪律。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性 D4/D6/D13/D15、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 16 天真实提交，「长期在维护」的证据链持续变厚。

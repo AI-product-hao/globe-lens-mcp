@@ -50,6 +50,12 @@
 > brand-new self-reference check, and probing robots/sitemap on the wrong origin
 > after cross-host redirects. Analysis now runs against the **final URL**, and
 > both tools expose `final_url` / `redirected` for traceability. 43 tests passing.
+>
+> **Updated 2026-07-27 (Day 16):** the streak is now 16+ days — every issue now
+> ships with an actionable, machine-readable `fix` hint (a concrete remedy such
+> as the exact tag to add), driven by a single `FIX_HINTS` table covering all 24
+> issue codes; a guard test locks the table to the analyzer source so a new
+> issue code can never ship without a remedy. 46 tests passing.
 
 ---
 
@@ -150,6 +156,7 @@ first.
 | 13 | 2026-07-24 | robustness | accept legacy `http-equiv` Content-Type charset form (kill false `charset_missing`) | **36 passed** |
 | 14 | 2026-07-26 | new audit dim | self-referencing hreflang check (`hreflang_self_ref` + `hreflang_no_self_ref` warning) | **40 passed** |
 | 15 | 2026-07-26 | bug fix | analyze against the **final URL** after redirects; expose `final_url` / `redirected` | **43 passed** |
+| 16 | 2026-07-27 | issue UX | actionable `fix` hint on every issue (`FIX_HINTS` table + source-locking guard test) | **46 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -167,7 +174,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 15+ day streak of tested, documented, backward-compatible
+> project with a continuous 16+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
