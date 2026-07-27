@@ -23,6 +23,38 @@ SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
 # search engines demote). Kept as a module constant so it is easy to tune.
 THIN_CONTENT_MIN_WORDS = 300
 
+# Actionable, copy-paste-friendly fix hint per issue code. The `message` says
+# *what* is wrong; `fix` says *what to do about it* — so an AI agent (or a
+# human) can apply the remedy without first researching the rule. Kept as a
+# single module-level table so message text and remedies never drift apart
+# and adding a new issue code forces a conscious decision about its fix.
+FIX_HINTS: dict[str, str] = {
+    "empty_html": "Verify the URL returns an HTML document (check redirects, auth walls, and bot blocking).",
+    "title_missing": "Add <title>Your page title</title> inside <head>; aim for 30-60 characters.",
+    "title_short": "Expand the <title> to 30-60 characters including your primary keyword.",
+    "title_long": "Shorten the <title> to 60 characters or less so it is not cut off in search results.",
+    "desc_missing": 'Add <meta name="description" content="..."> with a 70-160 character summary.',
+    "desc_short": "Expand the meta description to 70-160 characters to improve snippet quality.",
+    "desc_long": "Trim the meta description to 160 characters or less to avoid SERP truncation.",
+    "lang_missing": 'Add a lang attribute to the root element, e.g. <html lang="en">.',
+    "charset_missing": 'Add <meta charset="utf-8"> as the first element inside <head>.',
+    "viewport_missing": 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> for mobile rendering.',
+    "hreflang_missing": 'Add <link rel="alternate" hreflang="..." href="..."> for each language/region version of this page.',
+    "hreflang_no_default": 'Add <link rel="alternate" hreflang="x-default" href="..."> pointing to the fallback version.',
+    "hreflang_invalid": "Replace each invalid value with an ISO 639-1 language code, optionally plus a region (e.g. 'en', 'en-US'), or 'x-default'.",
+    "hreflang_no_self_ref": "Add an hreflang link whose href is this page's own URL to the alternate set.",
+    "og_missing": 'Add <meta property="og:title" ...> and <meta property="og:description" ...> for social sharing previews.',
+    "robots_noindex": "Remove 'noindex' from the meta robots tag if this page should appear in search results.",
+    "json_ld_missing": 'Add a <script type="application/ld+json"> block with schema.org markup matching the page type.',
+    "h1_missing": "Add exactly one <h1> heading describing the page's main topic.",
+    "h1_multiple": "Keep a single <h1> and demote the others to <h2>/<h3>.",
+    "images_missing_alt": 'Add a descriptive alt="..." to each listed <img> (use alt="" only for purely decorative images).',
+    "mixed_content": "Change each listed http:// subresource URL to https:// (or a relative/protocol-relative path).",
+    "broken_anchors": "For each listed anchor, add the missing id to the target element or update the href to an existing id.",
+    "thin_content": "Add substantive body text (aim for 300+ words) covering the page's topic in depth.",
+    "page_truncated": "Re-audit critical sections separately, or reduce the page size (the audit only covers the first part).",
+}
+
 # A well-formed hreflang value is an ISO 639-1 language code (2-3 letters),
 # optionally followed by a region: an ISO 3166-1 alpha-2 code (2 letters) or a
 # UN M.49 area code (3 digits), joined by a hyphen. The value is case-insensitive
@@ -62,10 +94,16 @@ class Issue:
     # Machine-sortable importance derived from `severity`. Added incrementally
     # (defaults to 0) so callers can trust the highest-priority item first.
     priority: int = 0
+    # Actionable remedy derived from `code` (see FIX_HINTS). Filled in
+    # automatically so every issue ships with a concrete "do this" step;
+    # empty string only for unknown codes.
+    fix: str = ""
 
     def __post_init__(self) -> None:
         if self.priority == 0:
             self.priority = SEVERITY_RANK.get(self.severity, 0)
+        if not self.fix:
+            self.fix = FIX_HINTS.get(self.code, "")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

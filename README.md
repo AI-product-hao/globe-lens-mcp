@@ -26,7 +26,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   boilerplate excluded), plus `robots.txt` /
   `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
-  > `info`), so the agent can act on the most urgent fix first.
+  > `info`) **and an actionable `fix` hint** (a concrete remedy such as the
+  exact tag to add), so the agent can apply the most urgent fix first without
+  researching the rule.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`,
   and **hreflang value validation** — malformed codes like `en_US` (underscore
   instead of hyphen) or `english` are flagged, since search engines silently
@@ -104,7 +106,8 @@ It calls `audit_url` and returns something like:
   "score": 78,
   "issues": [
     { "severity": "warning", "code": "hreflang_no_default", "priority": 2,
-      "message": "No x-default hreflang; recommended for international sites." }
+      "message": "No x-default hreflang; recommended for international sites.",
+      "fix": "Add <link rel=\"alternate\" hreflang=\"x-default\" href=\"...\"> pointing to the fallback version." }
   ]
 }
 ```

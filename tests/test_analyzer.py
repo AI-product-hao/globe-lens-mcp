@@ -485,3 +485,43 @@ def test_self_ref_not_applicable_without_hreflang():
     assert "hreflang_no_self_ref" not in [i.code for i in r.issues]
 
 
+
+
+def test_every_emitted_issue_carries_actionable_fix_hint():
+    # every issue produced by the analyzer must ship with a concrete remedy,
+    # and the hint must survive serialization (what MCP clients actually see)
+    r = analyze_html(SAMPLE_BAD, "https://example.com")
+    assert r.issues, "expected SAMPLE_BAD to produce issues"
+    for issue in r.issues:
+        assert issue.fix, f"issue {issue.code} has no fix hint"
+        assert issue.fix != issue.message  # remedy, not a restated problem
+    serialized = r.to_dict()
+    assert all(i["fix"] for i in serialized["issues"])
+    # degenerate input path must carry a fix hint too
+    r_empty = analyze_html("", "https://example.com")
+    assert r_empty.issues[0].code == "empty_html"
+    assert r_empty.issues[0].fix
+
+
+def test_fix_hints_cover_every_issue_code_in_analyzer():
+    # lock the FIX_HINTS table to the analyzer source: adding a new Issue(...)
+    # without a matching fix hint must fail this test, so the two never drift
+    import inspect
+    import re as _re
+
+    from globe_lens_mcp import analyzer
+
+    source = inspect.getsource(analyzer)
+    emitted_codes = set(_re.findall(r'Issue\(\s*"[a-z]+",\s*"([a-z0-9_]+)"', source))
+    assert emitted_codes, "expected to find Issue(...) codes in analyzer source"
+    missing = emitted_codes - set(analyzer.FIX_HINTS)
+    assert not missing, f"issue codes without a fix hint: {sorted(missing)}"
+
+
+def test_explicit_fix_overrides_lookup_and_unknown_code_is_empty():
+    from globe_lens_mcp.analyzer import Issue
+
+    custom = Issue("warning", "title_short", "msg", fix="Custom remedy.")
+    assert custom.fix == "Custom remedy."  # explicit fix wins over the table
+    unknown = Issue("info", "not_a_real_code", "msg")
+    assert unknown.fix == ""  # unknown codes degrade gracefully
