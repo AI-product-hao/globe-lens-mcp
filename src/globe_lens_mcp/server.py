@@ -15,11 +15,26 @@ mcp = FastMCP("GlobeLens")
 
 # Cap the HTML we feed to the parser. Real-world pages can be many MBs (heavy
 # SPAs, inlined data); auditing that much is slow and rarely useful, so we
-# truncate and tell the agent the result is partial.
+# truncate and tell the agent the result is partial. The default can be
+# overridden per call via the max_bytes tool parameter.
 MAX_HTML_BYTES = 2 * 1024 * 1024
 
+# Floor for a caller-supplied max_bytes. Below ~1 KiB there is not even room
+# for a <head>, so the audit would be pure noise; we clamp instead of erroring
+# to keep the tool call usable.
+MIN_HTML_BYTES = 1024
 
-def _decode_response(resp: httpx.Response) -> tuple[str, bool]:
+
+def _effective_max_bytes(max_bytes: int | None) -> int:
+    """Resolve the per-call HTML size cap: default when unset, floored else."""
+    if max_bytes is None:
+        return MAX_HTML_BYTES
+    return max(MIN_HTML_BYTES, max_bytes)
+
+
+def _decode_response(
+    resp: httpx.Response, max_bytes: int = MAX_HTML_BYTES
+) -> tuple[str, bool]:
     """Decode a response body to text safely and report if it was truncated.
 
     - Respects the response encoding (from Content-Type), falling back to UTF-8.
@@ -28,8 +43,8 @@ def _decode_response(resp: httpx.Response) -> tuple[str, bool]:
     """
     content = resp.content
     truncated = False
-    if len(content) > MAX_HTML_BYTES:
-        content = content[:MAX_HTML_BYTES]
+    if len(content) > max_bytes:
+        content = content[:max_bytes]
         truncated = True
     encoding = resp.encoding or "utf-8"
     try:
@@ -61,6 +76,7 @@ async def audit_url(
     timeout: int = 20,
     user_agent: str | None = None,
     verify_ssl: bool = True,
+    max_bytes: int | None = None,
 ) -> dict:
     """Audit a public URL for SEO & internationalization readiness.
 
@@ -80,6 +96,10 @@ async def audit_url(
             browser or a specific crawler).
         verify_ssl: Set False to skip TLS verification (useful for staging
             environments using self-signed certificates).
+        max_bytes: Cap on the HTML size fed to the parser (default 2 MiB).
+            Raise it to fully audit heavy SPA pages, or lower it to keep
+            audits of huge pages fast. Values below 1 KiB are clamped up;
+            truncation is always flagged via page_truncated.
     """
     headers = {
         "user-agent": user_agent
@@ -108,7 +128,7 @@ async def audit_url(
         # the wrong origin after a cross-host redirect.
         final_url = str(resp.url)
         redirected = bool(resp.history)
-        text, truncated = _decode_response(resp)
+        text, truncated = _decode_response(resp, _effective_max_bytes(max_bytes))
         report = analyze_html(text, final_url, truncated=truncated)
         robots_url, sitemap_url = robots_sitemap_urls(final_url)
         try:
@@ -134,6 +154,7 @@ async def check_i18n(
     timeout: int = 20,
     user_agent: str | None = None,
     verify_ssl: bool = True,
+    max_bytes: int | None = None,
 ) -> dict:
     """Focused check of internationalization signals: html lang, hreflang alternates, x-default.
 
@@ -142,6 +163,9 @@ async def check_i18n(
         timeout: Request timeout in seconds (default 20).
         user_agent: Override the default User-Agent.
         verify_ssl: Set False to skip TLS verification (e.g. staging sites).
+        max_bytes: Cap on the HTML size fed to the parser (default 2 MiB).
+            Values below 1 KiB are clamped up; truncation is reported via the
+            truncated flag in the result.
     """
     headers = {
         "user-agent": user_agent
@@ -167,7 +191,7 @@ async def check_i18n(
         # the body actually came from.
         final_url = str(resp.url)
         redirected = bool(resp.history)
-        text, truncated = _decode_response(resp)
+        text, truncated = _decode_response(resp, _effective_max_bytes(max_bytes))
         report = analyze_html(text, final_url, truncated=truncated)
         issues = [asdict(i) for i in report.issues
                   if i.code.startswith("hreflang") or i.code == "lang_missing"]

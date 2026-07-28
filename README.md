@@ -122,9 +122,11 @@ and for matching how real users or crawlers see your pages:
 | `timeout` | `20` | Tighten/loosen the request timeout (seconds). |
 | `user_agent` | GlobeLens bot | Override the UA to mimic a browser or a specific crawler. |
 | `verify_ssl` | `true` | Set `false` to audit staging sites with self-signed certs. |
+| `max_bytes` | `2097152` (2 MiB) | Cap on the HTML fed to the parser (`audit_url` / `check_i18n`). Raise it to fully audit heavy SPA pages; lower it to keep audits of huge pages fast. Values below 1 KiB are clamped up, and truncation is always flagged (`page_truncated` / `truncated`). |
 
 ```json
 { "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
+{ "url": "https://heavy-spa.example.com", "max_bytes": 8388608 }
 ```
 
 ## Develop

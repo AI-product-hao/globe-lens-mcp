@@ -173,6 +173,68 @@ def test_check_i18n_reports_truncation_flag():
     assert result["truncated"] is True
 
 
+def test_audit_url_respects_custom_max_bytes():
+    # An agent auditing a page it knows is huge can lower the cap to keep the
+    # audit fast; truncation must kick in at the custom limit, not the 2 MiB
+    # default, and still be flagged.
+    filler = b"<p>word </p>" * 4000  # ~48 KB, far below the default cap
+    body = (
+        b'<html lang="en"><head><meta charset="utf-8">'
+        b"<title>Big-ish</title></head><body><h1>x</h1>" + filler
+        + b"</body></html>"
+    )
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com", max_bytes=2048))
+
+    codes = [i["code"] for i in result["issues"]]
+    assert "page_truncated" in codes
+    # the head fits inside 2 KiB, so core fields still parse
+    assert result["html_lang"] == "en"
+
+
+def test_audit_url_clamps_max_bytes_to_floor():
+    # Absurdly small caps (e.g. 10 bytes) would leave nothing parseable; the
+    # server clamps to MIN_HTML_BYTES so a normal small page is NOT truncated.
+    assert len(SAMPLE.encode()) < server.MIN_HTML_BYTES
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, text=SAMPLE)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com", max_bytes=10))
+
+    codes = [i["code"] for i in result["issues"]]
+    assert "page_truncated" not in codes
+    assert result["title"] == "Options Test"
+
+
+def test_check_i18n_respects_custom_max_bytes():
+    body = b'<html lang="en"><head><meta charset="utf-8"><title>T</title></head>' \
+           b"<body>" + b"<p>word</p>" * 4000 + b"</body></html>"
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com", max_bytes=2048))
+
+    assert result["truncated"] is True
+    assert result["html_lang"] == "en"
+
+
 def test_audit_url_returns_structured_error_on_404():
     # A 404 (or any non-2xx) must become a parseable error dict, not an
     # unhandled exception that loses the whole tool call for the agent.
