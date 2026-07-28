@@ -172,3 +172,14 @@
 - **文档**：README Features 补「actionable `fix` hint」说明；Example JSON 增加 `"fix"` 字段与真实返回一致。
 - **测试结果**：`pytest -q` → 46 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 16 天。本次改的是**输出最后一公里**：审计工具的价值不在「报了多少问题」，而在「拿到报告能不能直接动手」。message + fix 的分离让 agent 无需二次检索规则即可修复——这正是「给 AI agent 用的审计工具」这一定位的字面兑现。工程上用单一事实来源表 + 源码锁表测试保证 24 个 code 的修复提示永不缺失、永不漂移，延续「每改必测、文档同步、向后兼容」的纪律。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2、健壮性 D4/D6/D13/D15、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 16 天真实提交，「长期在维护」的证据链持续变厚。
+
+## Day 17 — 2026-07-28（持续维护，Day 16 之后的第 1 天）
+- **改动类型：工具可选参数（`max_bytes` 可配的 HTML 截断上限；与 Day 16「Issue 文案」不同类，满足避免连续同类规则；上次同类是 Day 2，间隔 15 天，多样性最大化）**。Day 6 引入的 2 MiB HTML 截断上限一直是硬编码：审计重型 SPA（内联了大量数据/组件的页面）的 agent **无法调高**拿到完整审计，想快速扫大页面的 agent 也**无法调低**换速度。本次把它做成真实可控的调用参数：
+  - `audit_url` / `check_i18n` 新增可选参数 `max_bytes: int | None = None`（默认 `None` = 沿用 2 MiB，既有调用零变化、完全向后兼容）。
+  - 新增 `MIN_HTML_BYTES = 1024` 下限 + `_effective_max_bytes()` helper：调用方传入低于 1 KiB 的荒谬值（如 `10`）时**向上钳制**而不是报错——1 KiB 以下连 `<head>` 都装不下，截出来的碎片只会产出纯噪声审计；钳制策略保证工具调用永远可用，延续「失败路径也要友好」的设计哲学。
+  - `_decode_response()` 改为接受上限参数；截断**始终**通过 `page_truncated` issue（audit_url）与 `truncated` 标志（check_i18n）显式暴露——部分审计永不静默。
+  - 工具 docstring 说明何时调高（重 SPA 完整审计）、何时调低（大页面快扫）；`check_robots_sitemap` 不解码 HTML 正文，无需此参数。
+- **测试**：`tests/test_server.py` 新增 3 例——`test_audit_url_respects_custom_max_bytes`（48 KB 页面 + `max_bytes=2048` → 在自定义上限处截断并标记，且 head 在 2 KiB 内、核心字段照常解析）、`test_audit_url_clamps_max_bytes_to_floor`（`max_bytes=10` 被钳制到 1 KiB，正常小页面**不**被截断、title 完整）、`test_check_i18n_respects_custom_max_bytes`（check_i18n 同样生效并透出 `truncated: true`）。总用例 46 → 49，全部通过，零回归。
+- **文档**：README「Tool options」表格新增 `max_bytes` 行（默认值、调高/调低场景、1 KiB 钳制、截断必标记），并补一条 heavy-SPA 示例调用 JSON。
+- **测试结果**：`pytest -q` → 49 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 17 天。本次是「把内部机制交给使用者控制」的典型改进：Day 6 为了工程安全定死的上限，在真实使用中会成为两类 agent 的天花板（要完整性的和要速度的），把它参数化正是「工具被真实使用后长出来的需求」。实现上刻意做了下限钳制而非抛错——工具参数设计的成熟度体现在「用户传错值时仍然给出可用结果」。类别轮换健康度极佳（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2/D17、健壮性 D4/D6/D13/D15、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 17 天真实提交，「长期在维护」的证据链持续变厚。

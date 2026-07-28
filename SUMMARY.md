@@ -56,6 +56,12 @@
 > as the exact tag to add), driven by a single `FIX_HINTS` table covering all 24
 > issue codes; a guard test locks the table to the analyzer source so a new
 > issue code can never ship without a remedy. 46 tests passing.
+>
+> **Updated 2026-07-28 (Day 17):** the streak is now 17+ days — the 2 MiB HTML
+> truncation cap (hardcoded since Day 6) is now a per-call `max_bytes` parameter
+> on `audit_url` / `check_i18n`: raise it to fully audit heavy SPA pages, lower
+> it for fast scans; nonsense values are clamped to a 1 KiB floor instead of
+> erroring, and truncation is always flagged. 49 tests passing.
 
 ---
 
@@ -157,6 +163,7 @@ first.
 | 14 | 2026-07-26 | new audit dim | self-referencing hreflang check (`hreflang_self_ref` + `hreflang_no_self_ref` warning) | **40 passed** |
 | 15 | 2026-07-26 | bug fix | analyze against the **final URL** after redirects; expose `final_url` / `redirected` | **43 passed** |
 | 16 | 2026-07-27 | issue UX | actionable `fix` hint on every issue (`FIX_HINTS` table + source-locking guard test) | **46 passed** |
+| 17 | 2026-07-28 | tool options | per-call `max_bytes` HTML cap (raise for heavy SPAs, lower for fast scans; 1 KiB floor clamp) | **49 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -174,7 +181,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 16+ day streak of tested, documented, backward-compatible
+> project with a continuous 17+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
