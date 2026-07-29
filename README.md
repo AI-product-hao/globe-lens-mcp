@@ -23,7 +23,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   (insecure `http://` subresources on HTTPS pages), **broken in-page anchor
   links** (`href="#frag"` pointing to a missing target), **thin-content
   detection** (body word count below a healthy threshold, script/style
-  boilerplate excluded), plus `robots.txt` /
+  boilerplate excluded), **conflicting `canonical` detection** (multiple
+  `rel="canonical"` links pointing to *different* URLs — which makes search
+  engines ignore the canonical signal entirely; duplicate links resolving to the
+  same address are not flagged), plus `robots.txt` /
   `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
   > `info`) **and an actionable `fix` hint** (a concrete remedy such as the

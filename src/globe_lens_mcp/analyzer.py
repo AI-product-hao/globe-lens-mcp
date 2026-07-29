@@ -53,6 +53,7 @@ FIX_HINTS: dict[str, str] = {
     "broken_anchors": "For each listed anchor, add the missing id to the target element or update the href to an existing id.",
     "thin_content": "Add substantive body text (aim for 300+ words) covering the page's topic in depth.",
     "page_truncated": "Re-audit critical sections separately, or reduce the page size (the audit only covers the first part).",
+    "canonical_conflict": "Keep a single canonical link pointing to one URL; remove the duplicates or make them all agree on the same address.",
 }
 
 # A well-formed hreflang value is an ISO 639-1 language code (2-3 letters),
@@ -137,6 +138,10 @@ class AuditReport:
     has_json_ld: bool = False
     canonical: str | None = None
     canonical_url: str | None = None
+    # All distinct canonical URLs declared on the page (absolute form). Empty
+    # when there is no canonical link; >1 entry signals a conflicting/duplicate
+    # canonical set that search engines will ignore.
+    canonical_urls: list[str] = field(default_factory=list)
     hreflang: list[dict[str, str]] = field(default_factory=list)
     invalid_hreflang: list[str] = field(default_factory=list)
     # None = page has no hreflang links (check not applicable);
@@ -253,18 +258,42 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                                     "Missing viewport meta tag (mobile unfriendly)."))
 
     # --- canonical / hreflang / og / twitter ---
+    canonical_hrefs: list[str] = []
     for link in soup.find_all("link"):
         rels = _rel_values(link)
         if "canonical" in rels and link.get("href"):
-            href = link.get("href")
-            report.canonical = href
-            report.canonical_url = urljoin(url, href)
+            href = link.get("href").strip()
+            canonical_hrefs.append(href)
         if "alternate" in rels and link.get("hreflang"):
             href = link.get("href")
             entry = {"hreflang": link.get("hreflang"), "href": href}
             if href:
                 entry["abs_href"] = urljoin(url, href)
             report.hreflang.append(entry)
+
+    # Multiple canonical links are a known trap: when two or more declare
+    # *different* URLs, search engines ignore canonical signals for the page
+    # entirely (the conflicting hints cancel out). We keep the first declaration
+    # as the authoritative `canonical` and surface any disagreement so an agent
+    # can reconcile them. Identifying duplicates pointing to the same URL (even
+    # when written as relative vs absolute) is not a conflict.
+    if canonical_hrefs:
+        # Use the first non-empty declaration as the canonical link.
+        report.canonical = canonical_hrefs[0]
+        report.canonical_url = urljoin(url, canonical_hrefs[0])
+        # De-duplicate on the resolved absolute URL to decide if they conflict.
+        resolved = []
+        for href in canonical_hrefs:
+            abs_href = urljoin(url, href)
+            if abs_href not in resolved:
+                resolved.append(abs_href)
+        report.canonical_urls = resolved
+        if len(resolved) > 1:
+            report.issues.append(Issue(
+                "warning", "canonical_conflict",
+                "Multiple canonical links point to different URLs "
+                f"({', '.join(resolved)}); search engines ignore conflicting "
+                f"canonical signals, so pick a single URL."))
 
     for meta in soup.find_all("meta"):
         prop = meta.get("property") or meta.get("name")

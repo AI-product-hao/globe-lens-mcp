@@ -62,6 +62,14 @@
 > on `audit_url` / `check_i18n`: raise it to fully audit heavy SPA pages, lower
 > it for fast scans; nonsense values are clamped to a 1 KiB floor instead of
 > erroring, and truncation is always flagged. 49 tests passing.
+>
+> **Updated 2026-07-29 (Day 18):** the streak is now 18+ days — a new SEO audit
+> dimension shipped: **conflicting canonical detection**. Multiple `rel="canonical"`
+> links pointing to *different* URLs make search engines ignore the canonical
+> signal entirely; GlobeLens flags the conflict (`canonical_conflict`) and now
+> resolves on the *first* declaration (previously it silently took the last).
+> Duplicate links resolving to the same address are correctly not flagged. 51 tests
+> passing.
 
 ---
 
@@ -86,12 +94,14 @@ ship sites that are correct across regions and languages.
 
 | Tool | Signature | What it returns |
 | --- | --- | --- |
-| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
-| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | i18n-focused subset: `html_lang`, `hreflang` alternates, `x-default`, filtered+sorted issues, `truncated` flag. |
+| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
+| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | i18n-focused subset: `html_lang`, `hreflang` alternates, `x-default`, filtered+sorted issues, `truncated` flag. |
 | `check_robots_sitemap` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | Whether the site exposes `robots.txt` and `sitemap.xml` (presence + fetch error detail). |
 
 All three accept optional `timeout` / `user_agent` / `verify_ssl` for real
-staging/preview/self-signed-cert workflows.
+staging/preview/self-signed-cert workflows. `audit_url` / `check_i18n` additionally
+accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values below
+1 KiB are clamped up; truncation is always flagged).
 
 ---
 
@@ -103,7 +113,7 @@ staging/preview/self-signed-cert workflows.
 - **Charset** — declared or not; accepts both the HTML5 `<meta charset>` and the
   legacy `<meta http-equiv="Content-Type" content="…; charset=…">` form.
 - **Viewport** — present or not (mobile friendliness).
-- **Canonical** — captured verbatim **and** resolved to an absolute `canonical_url`.
+- **Canonical** — captured verbatim **and** resolved to an absolute `canonical_url`; **conflicting `canonical` links** (two or more `<link rel="canonical">` pointing to *different* URLs) are flagged as `canonical_conflict` (search engines then ignore the canonical signal), while duplicates resolving to the same address are not.
 - **hreflang** — captured with each entry resolved to an absolute `abs_href`;
   warns when no `x-default`, and **validates each hreflang value's format**
   (`hreflang_invalid` warning + `invalid_hreflang` list) **and the
@@ -164,6 +174,7 @@ first.
 | 15 | 2026-07-26 | bug fix | analyze against the **final URL** after redirects; expose `final_url` / `redirected` | **43 passed** |
 | 16 | 2026-07-27 | issue UX | actionable `fix` hint on every issue (`FIX_HINTS` table + source-locking guard test) | **46 passed** |
 | 17 | 2026-07-28 | tool options | per-call `max_bytes` HTML cap (raise for heavy SPAs, lower for fast scans; 1 KiB floor clamp) | **49 passed** |
+| 18 | 2026-07-29 | new audit dim | conflicting `canonical` detection (`canonical_conflict`; first declaration now authoritative) | **51 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -181,7 +192,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 17+ day streak of tested, documented, backward-compatible
+> project with a continuous 18+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us

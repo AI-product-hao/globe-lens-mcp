@@ -183,3 +183,13 @@
 - **文档**：README「Tool options」表格新增 `max_bytes` 行（默认值、调高/调低场景、1 KiB 钳制、截断必标记），并补一条 heavy-SPA 示例调用 JSON。
 - **测试结果**：`pytest -q` → 49 passed。
 - **对 Codex for OSS 申请的贡献**：持续活跃进入第 17 天。本次是「把内部机制交给使用者控制」的典型改进：Day 6 为了工程安全定死的上限，在真实使用中会成为两类 agent 的天花板（要完整性的和要速度的），把它参数化正是「工具被真实使用后长出来的需求」。实现上刻意做了下限钳制而非抛错——工具参数设计的成熟度体现在「用户传错值时仍然给出可用结果」。类别轮换健康度极佳（新维度 D1/D3/D5/D8/D10/D12/D14、工具参数 D2/D17、健壮性 D4/D6/D13/D15、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 17 天真实提交，「长期在维护」的证据链持续变厚。
+
+## Day 18 — 2026-07-29（持续维护，Day 17 之后的第 1 天）
+- **改动类型：新增审计维度（冲突的多重 canonical 检测；与 Day 17「工具可选参数」不同类，满足避免连续同类规则）**。Google 官方规则：当页面上存在**多个指向不同 URL 的 canonical 链接**时，搜索引擎会**直接忽略整页的 canonical 信号**——这是 CMS 迁移、模板拼接、插件各自注入 canonical 时最高频、最隐蔽的真实错误之一，源码看着「都有 canonical」一切正常，线上规范化却整体失效。本次把这一维度补齐（纯 HTML、零网络、可单测）：
+  - `analyzer.py` 在 link 循环内收集所有 `rel="canonical"` 的 href（修复了此前**静默取最后一个**的隐性缺陷——现在明确以**第一条**为准记入 `canonical` / `canonical_url`）；按解析后的绝对地址**去重**后，若得到多个不同地址，则记 `canonical_conflict` warning，消息直接列出冲突 URL、说明搜索引擎会忽略冲突信号；新增 `canonical_urls: list[str]` 字段（绝对地址全量，向后兼容、不影响既有 `to_dict`）。
+  - 关键正确性：**重复但指向同一地址**（如 `href="/"` 与 `href="https://example.com/"`）不算冲突——按绝对地址去重后只剩 1 个，不误报；只有真正指向不同 URL 才告警。
+  - `FIX_HINTS` 同步补 `canonical_conflict` 修复提示（「只保留指向同一地址的单一 canonical」），源码锁表测试自动覆盖、无遗漏。
+- **测试**：`tests/test_analyzer.py` 新增 2 例——`test_flags_conflicting_canonical_links`（两条 canonical 指向 `/` 与 `/home` → `canonical_conflict` 命中、`canonical_urls` 精确等于两个绝对地址、`canonical` 取第一条）、`test_ignores_duplicate_canonical_to_same_url`（相对/绝对重复 → 不误报、`canonical_urls` 仅剩 1 条）；pytest 49 → 51 passed，零回归。
+- **文档**：README Features 在 `audit_url` 说明补 **conflicting `canonical` detection**；`SUMMARY.md` 同步（追加 Day 18 行、测试计数 49→51、价值陈述更新为 18+ day streak、维度清单加 canonical 冲突）。
+- **测试结果**：`pytest -q` → 51 passed。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 18 天。本次选的是**最贴合项目 SEO 核心定位、且被几乎所有轻量审计工具忽略**的信号：canonical 冲突不是「有没有 canonical」这种表层检查，而是「多个 canonical 是不是指向同一个地方」这种源码看着正常、线上却让规范化整体失效的深层坑——正是 AI agent 在生成/改动页面模板时最需要即时兜底的错误。实现上同时修掉了旧代码「静默取最后一个 canonical」的隐性缺陷、做了绝对地址去重避免误报、用正反例双测试把边界钉死。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18、工具参数 D2/D17、健壮性 D4/D6/D13/D15、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 18 天真实提交，「长期在维护」的证据链持续变厚。

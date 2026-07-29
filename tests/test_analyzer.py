@@ -113,6 +113,42 @@ def test_detects_json_ld_and_skips_missing_warning():
     assert "robots_noindex" not in codes
 
 
+SAMPLE_CANON_CONFLICT = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Canonical Conflict Demo</title>
+<link rel="canonical" href="https://example.com/">
+<link rel="canonical" href="https://example.com/home">
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_CANON_DUP = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Canonical Duplicate Demo</title>
+<link rel="canonical" href="/">
+<link rel="canonical" href="https://example.com/">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_conflicting_canonical_links():
+    # Two <link rel="canonical"> pointing at different URLs: Google ignores the
+    # whole canonical signal, so this must be surfaced (and not crash).
+    r = analyze_html(SAMPLE_CANON_CONFLICT, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "canonical_conflict" in codes
+    assert r.canonical == "https://example.com/"
+    assert r.canonical_urls == [
+        "https://example.com/",
+        "https://example.com/home",
+    ]
+
+
+def test_ignores_duplicate_canonical_to_same_url():
+    # The same URL written relatively vs absolutely is NOT a conflict.
+    r = analyze_html(SAMPLE_CANON_DUP, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "canonical_conflict" not in codes
+    assert r.canonical_urls == ["https://example.com/"]
+
+
 SAMPLE_RELATIVE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Relative Links Demo</title>
