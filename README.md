@@ -47,7 +47,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   HTML returns a clear `empty_html` error instead of crashing. Charset detection
   accepts **both** the HTML5 `<meta charset>` and the legacy
   `<meta http-equiv="Content-Type" content="…; charset=…">` form, so older /
-  non-English pages are no longer falsely flagged as missing a charset. GlobeLens
+  non-English pages are no longer falsely flagged as missing a charset. In-page
+  anchor checking **percent-decodes fragments before matching** (browsers do the
+  same), so encoded non-ASCII anchors like `href="#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B"`
+  targeting `id="快速开始"` — the norm on CJK/i18n docs sites — are not falsely
+  reported as broken. GlobeLens
   also decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
   audits stay fast and bounded. When a target is unreachable, `audit_url` and

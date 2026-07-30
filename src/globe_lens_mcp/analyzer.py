@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -436,9 +436,18 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         if not frag:
             # href="#" → scroll-to-top; a valid (if empty) target, not broken.
             continue
-        if frag in anchor_targets or frag in seen_anchor:
+        # Browsers percent-decode the fragment before matching it against
+        # element ids (URL spec), and static-site generators routinely write
+        # non-ASCII heading anchors percent-encoded in the href while the id
+        # stays as literal text (e.g. href="#%E4%B8%AD%E6%96%87" targeting
+        # id="中文"). Compare the decoded form too, so CJK / accented anchors
+        # on i18n sites are not falsely reported as broken.
+        decoded = unquote(frag)
+        if frag in anchor_targets or decoded in anchor_targets:
             continue
-        seen_anchor.add(frag)
+        if decoded in seen_anchor:
+            continue
+        seen_anchor.add(decoded)
         report.broken_anchors.append({
             "href": href,
             "text": (a.get_text() or "").strip()[:80],

@@ -263,6 +263,43 @@ def test_ignores_valid_anchors_and_top_link():
     assert "broken_anchors" not in [i.code for i in good.issues]
 
 
+def test_percent_encoded_anchor_matches_literal_id():
+    # Static-site generators (MkDocs, Docusaurus, GitBook, ...) write non-ASCII
+    # heading anchors percent-encoded in the href while the target id stays as
+    # literal text. Browsers decode the fragment before matching, so these are
+    # NOT broken — flagging them was a false positive on CJK/i18n docs sites.
+    good = analyze_html(
+        '<html lang="zh"><head><meta charset="utf-8"><title>ok</title></head>'
+        '<body><h1>Hi</h1>'
+        '<a href="#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B">快速开始</a>'
+        '<a href="#caf%C3%A9">Café section</a>'
+        '<h2 id="快速开始">快速开始</h2>'
+        '<h2 id="café">Café</h2>'
+        '</body></html>',
+        "https://example.com/docs",
+    )
+    assert good.broken_anchors == []
+    assert "broken_anchors" not in [i.code for i in good.issues]
+
+
+def test_percent_encoded_anchor_still_flagged_when_target_missing():
+    # Decoding must not hide *real* breakage: an encoded fragment whose decoded
+    # form matches nothing is still broken, and repeated occurrences of the
+    # same target (encoded or literal) are de-duplicated into one record.
+    bad = analyze_html(
+        '<html lang="zh"><head><meta charset="utf-8"><title>ok</title></head>'
+        '<body><h1>Hi</h1>'
+        '<a href="#%E4%B8%8D%E5%AD%98%E5%9C%A8">missing encoded</a>'
+        '<a href="#不存在">missing literal duplicate</a>'
+        '<h2 id="快速开始">快速开始</h2>'
+        '</body></html>',
+        "https://example.com/docs",
+    )
+    assert len(bad.broken_anchors) == 1
+    assert bad.broken_anchors[0]["href"] == "#%E4%B8%8D%E5%AD%98%E5%9C%A8"
+    assert "broken_anchors" in [i.code for i in bad.issues]
+
+
 def test_flags_page_truncated():
     r = analyze_html(SAMPLE_GOOD, "https://example.com", truncated=True)
     codes = [i.code for i in r.issues]
