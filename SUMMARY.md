@@ -70,6 +70,15 @@
 > resolves on the *first* declaration (previously it silently took the last).
 > Duplicate links resolving to the same address are correctly not flagged. 51 tests
 > passing.
+>
+> **Updated 2026-07-30 (Day 19):** the streak is now 19+ days — a false-positive
+> fix squarely in the project's i18n home turf: in-page anchor checking now
+> **percent-decodes fragments before matching** (matching browser behavior), so
+> encoded non-ASCII anchors (`href="#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B"` →
+> `id="快速开始"`), the norm on CJK/accented docs sites built with MkDocs /
+> Docusaurus / GitBook, are no longer falsely reported as broken. Genuinely
+> missing encoded targets are still flagged, and encoded + literal spellings of
+> the same missing target de-duplicate into one record. 53 tests passing.
 
 ---
 
@@ -175,6 +184,7 @@ first.
 | 16 | 2026-07-27 | issue UX | actionable `fix` hint on every issue (`FIX_HINTS` table + source-locking guard test) | **46 passed** |
 | 17 | 2026-07-28 | tool options | per-call `max_bytes` HTML cap (raise for heavy SPAs, lower for fast scans; 1 KiB floor clamp) | **49 passed** |
 | 18 | 2026-07-29 | new audit dim | conflicting `canonical` detection (`canonical_conflict`; first declaration now authoritative) | **51 passed** |
+| 19 | 2026-07-30 | bug fix | percent-decode anchor fragments before matching (kill false `broken_anchors` on CJK/i18n docs sites) | **53 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -192,7 +202,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 18+ day streak of tested, documented, backward-compatible
+> project with a continuous 19+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
