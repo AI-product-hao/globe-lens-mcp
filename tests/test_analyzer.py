@@ -560,6 +560,88 @@ def test_self_ref_not_applicable_without_hreflang():
 
 
 
+# --- <html lang> value validity + agreement with hreflang (i18n) ---
+# Declaring *a* lang is not enough: a malformed tag is ignored outright, and a
+# lang that contradicts the page's own hreflang entry means browsers/screen
+# readers and search engines infer different languages for the same page.
+def test_flags_invalid_html_lang_value():
+    html = (
+        '<html lang="english"><head><meta charset="utf-8">'
+        "<title>Invalid Language Tag Demo Page</title>"
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com/")
+    assert r.html_lang == "english"
+    assert r.lang_valid is False
+    assert "lang_invalid" in [i.code for i in r.issues]
+    # presence is still detected, so lang_missing must NOT also fire
+    assert "lang_missing" not in [i.code for i in r.issues]
+
+
+def test_accepts_bcp47_lang_and_hreflang_with_script_subtag():
+    # zh-Hans / zh-Hant are valid BCP 47 tags (language + ISO 15924 script) and
+    # are widely used on Chinese sites — flagging them would be a false positive
+    html = (
+        '<html lang="zh-Hans"><head><meta charset="utf-8">'
+        "<title>Script Subtag Language Tag Demo</title>"
+        '<link rel="alternate" hreflang="zh-Hans" href="https://example.com/">'
+        '<link rel="alternate" hreflang="zh-Hant-TW" href="https://example.com/tw">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com/")
+    assert r.lang_valid is True
+    codes = [i.code for i in r.issues]
+    assert "lang_invalid" not in codes
+    assert "hreflang_invalid" not in codes
+    assert r.invalid_hreflang == []
+
+
+def test_flags_lang_hreflang_language_mismatch():
+    # the /de page tells search engines it is German (self-referencing
+    # hreflang="de") but tells browsers it is English (<html lang="en">)
+    html = (
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>Language Mismatch Demonstration Page</title>"
+        '<link rel="alternate" hreflang="de" href="https://example.com/de">'
+        '<link rel="alternate" hreflang="fr" href="https://example.com/fr">'
+        "</head><body><h1>Hallo</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com/de")
+    assert r.hreflang_self_ref is True
+    assert r.lang_hreflang_mismatch is True
+    issue = next(i for i in r.issues if i.code == "lang_hreflang_mismatch")
+    assert "de" in issue.message and issue.fix
+
+
+def test_no_mismatch_when_only_region_differs():
+    # "en-US" vs "en-GB" is a region difference, not a language conflict —
+    # flagging it would be a false positive
+    html = (
+        '<html lang="en-US"><head><meta charset="utf-8">'
+        "<title>Region Only Difference Demo Page</title>"
+        '<link rel="alternate" hreflang="en-GB" href="https://example.com/uk">'
+        '<link rel="alternate" hreflang="x-default" href="https://example.com/">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com/uk")
+    assert r.lang_hreflang_mismatch is False
+    assert "lang_hreflang_mismatch" not in [i.code for i in r.issues]
+
+
+def test_lang_checks_not_applicable_without_lang_or_self_hreflang():
+    # no lang attribute at all -> validity check is N/A (None), never flagged
+    r_bad = analyze_html(SAMPLE_BAD, "https://example.com")
+    assert r_bad.lang_valid is None
+    assert r_bad.lang_hreflang_mismatch is None
+    assert "lang_invalid" not in [i.code for i in r_bad.issues]
+    # SAMPLE_GOOD self-references only via x-default (no language to compare),
+    # so the mismatch check stays N/A instead of guessing
+    r_good = analyze_html(SAMPLE_GOOD, "https://example.com")
+    assert r_good.lang_valid is True
+    assert r_good.lang_hreflang_mismatch is None
+    assert "lang_hreflang_mismatch" not in [i.code for i in r_good.issues]
+
+
 def test_every_emitted_issue_carries_actionable_fix_hint():
     # every issue produced by the analyzer must ship with a concrete remedy,
     # and the hint must survive serialization (what MCP clients actually see)

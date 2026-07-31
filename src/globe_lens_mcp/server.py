@@ -156,7 +156,11 @@ async def check_i18n(
     verify_ssl: bool = True,
     max_bytes: int | None = None,
 ) -> dict:
-    """Focused check of internationalization signals: html lang, hreflang alternates, x-default.
+    """Focused check of internationalization signals.
+
+    Covers: `<html lang>` presence *and* BCP 47 validity, hreflang alternates
+    (value validity, x-default, self-reference), and whether `<html lang>`
+    agrees with the page's own hreflang entry.
 
     Args:
         url: The page to check.
@@ -194,12 +198,14 @@ async def check_i18n(
         text, truncated = _decode_response(resp, _effective_max_bytes(max_bytes))
         report = analyze_html(text, final_url, truncated=truncated)
         issues = [asdict(i) for i in report.issues
-                  if i.code.startswith("hreflang") or i.code == "lang_missing"]
+                  if i.code.startswith(("hreflang", "lang"))]
         return {
             "url": url,
             "final_url": final_url,
             "redirected": redirected,
             "html_lang": report.html_lang,
+            "lang_valid": report.lang_valid,
+            "lang_hreflang_mismatch": report.lang_hreflang_mismatch,
             "hreflang": report.hreflang,
             "hreflang_self_ref": report.hreflang_self_ref,
             "issues": issues,

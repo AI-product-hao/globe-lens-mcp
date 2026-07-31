@@ -41,6 +41,14 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   ignored — GlobeLens compares resolved, normalized URLs (trailing slash and
   host case insensitive) and reports `hreflang_self_ref` plus a
   `hreflang_no_self_ref` warning when the self-link is missing.
+- 🗣️ **Language tag correctness**: `<html lang>` is validated as a real BCP 47
+  tag (`lang_valid`), so `english`, `en_US` or `en-USA` are flagged
+  (`lang_invalid`) instead of silently ignored by browsers and screen readers;
+  script subtags such as `zh-Hans` / `zh-Hant-TW` are accepted for both `lang`
+  and `hreflang`. GlobeLens also cross-checks the two signals: if a page's own
+  hreflang entry says `de` while `<html lang="en">`, you get a
+  `lang_hreflang_mismatch` warning (a region-only difference like `en-US` vs
+  `en-GB` is deliberately **not** flagged).
 - 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
   **absolute URLs** (so an agent can act on them directly), and empty / malformed

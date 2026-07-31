@@ -365,3 +365,31 @@ def test_check_i18n_exposes_final_url_after_redirect():
     assert result["hreflang_self_ref"] is True
     codes = [i["code"] for i in result["issues"]]
     assert "hreflang_no_self_ref" not in codes
+
+
+# --- lang validity / lang-vs-hreflang agreement surfaced by check_i18n ---
+LANG_CONFLICT_PAGE = """<!doctype html>
+<html lang="english"><head><meta charset="utf-8">
+<title>Lang Conflict</title>
+<link rel="alternate" hreflang="de" href="https://example.com/de">
+</head><body><h1>Hallo</h1></body></html>"""
+
+
+def test_check_i18n_exposes_lang_validity_and_related_issues():
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(
+                lambda r: httpx.Response(200, text=LANG_CONFLICT_PAGE)
+            ),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com/de"))
+
+    assert result["html_lang"] == "english"
+    assert result["lang_valid"] is False
+    # lang is invalid, so the language comparison is skipped rather than guessed
+    assert result["lang_hreflang_mismatch"] is None
+    # the issue filter must let lang_* codes through, not just hreflang*
+    assert "lang_invalid" in [i["code"] for i in result["issues"]]

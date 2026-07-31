@@ -37,6 +37,8 @@ FIX_HINTS: dict[str, str] = {
     "desc_short": "Expand the meta description to 70-160 characters to improve snippet quality.",
     "desc_long": "Trim the meta description to 160 characters or less to avoid SERP truncation.",
     "lang_missing": 'Add a lang attribute to the root element, e.g. <html lang="en">.',
+    "lang_invalid": "Replace the <html lang> value with a BCP 47 tag: language, optional script/region joined by hyphens (e.g. 'en', 'en-US', 'zh-Hans').",
+    "lang_hreflang_mismatch": "Make <html lang> match the language of this page's own hreflang entry (change whichever one is wrong).",
     "charset_missing": 'Add <meta charset="utf-8"> as the first element inside <head>.',
     "viewport_missing": 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> for mobile rendering.',
     "hreflang_missing": 'Add <link rel="alternate" hreflang="..." href="..."> for each language/region version of this page.',
@@ -56,23 +58,43 @@ FIX_HINTS: dict[str, str] = {
     "canonical_conflict": "Keep a single canonical link pointing to one URL; remove the duplicates or make them all agree on the same address.",
 }
 
-# A well-formed hreflang value is an ISO 639-1 language code (2-3 letters),
-# optionally followed by a region: an ISO 3166-1 alpha-2 code (2 letters) or a
-# UN M.49 area code (3 digits), joined by a hyphen. The value is case-insensitive
-# and "x-default" is a reserved keyword. Anything else (e.g. the extremely common
-# "en_US" with an underscore, or a full word like "english") is silently ignored
-# by search engines — so it is worth surfacing to the author.
-_HREFLANG_RE = re.compile(r"^[a-z]{2,3}(-[a-z]{2}|-[0-9]{3})?$", re.IGNORECASE)
+# A well-formed language tag (BCP 47, as used by both `<html lang>` and
+# hreflang) is an ISO 639-1/639-2 language code (2-3 letters), optionally
+# followed by an ISO 15924 script (4 letters, e.g. "Hans"), optionally followed
+# by a region: an ISO 3166-1 alpha-2 code (2 letters) or a UN M.49 area code
+# (3 digits). Subtags are hyphen-joined and case-insensitive. Anything else
+# (e.g. the extremely common "en_US" with an underscore, or a full word like
+# "english") is silently ignored by browsers and search engines — so it is
+# worth surfacing to the author.
+_LANG_TAG_RE = re.compile(
+    r"^[a-z]{2,3}(-[a-z]{4})?(-([a-z]{2}|[0-9]{3}))?$", re.IGNORECASE
+)
+
+
+def _is_valid_language_tag(code: str | None) -> bool:
+    """Return True if `code` is a syntactically valid BCP 47 language tag."""
+    if not code:
+        return False
+    return bool(_LANG_TAG_RE.match(code.strip()))
 
 
 def _is_valid_hreflang(code: str | None) -> bool:
-    """Return True if `code` is a syntactically valid hreflang value."""
+    """Return True if `code` is a syntactically valid hreflang value.
+
+    Same grammar as `<html lang>` plus the reserved "x-default" keyword.
+    """
     if not code:
         return False
-    code = code.strip()
-    if code.lower() == "x-default":
+    if code.strip().lower() == "x-default":
         return True
-    return bool(_HREFLANG_RE.match(code))
+    return _is_valid_language_tag(code)
+
+
+def _primary_subtag(code: str | None) -> str:
+    """Return the lowercase language subtag of a tag ("en-GB" -> "en")."""
+    if not code:
+        return ""
+    return code.strip().split("-", 1)[0].lower()
 
 
 def _self_ref_key(u: str) -> tuple[str, str, str, str]:
@@ -127,6 +149,13 @@ class AuditReport:
     meta_description_length: int = 0
     word_count: int = 0
     html_lang: str | None = None
+    # None = no lang attribute (check not applicable); True/False = whether the
+    # declared value is a syntactically valid BCP 47 language tag.
+    lang_valid: bool | None = None
+    # None = not applicable (no lang, or no self-referencing language-specific
+    # hreflang to compare against); True = <html lang> and the page's own
+    # hreflang entry declare different languages.
+    lang_hreflang_mismatch: bool | None = None
     charset: str | None = None
     viewport: bool = False
     h1_count: int = 0
@@ -223,6 +252,16 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     html_tag = soup.find("html")
     if html_tag and html_tag.get("lang") and html_tag["lang"].strip():
         report.html_lang = html_tag["lang"].strip()
+        # Declaring *a* lang is not enough: browsers, screen readers and
+        # translation tools ignore a malformed tag entirely, so the page ends
+        # up behaving as if no language were declared at all. Common real-world
+        # mistakes: "english", "en_US" (underscore), "en-USA" (3-letter region).
+        report.lang_valid = _is_valid_language_tag(report.html_lang)
+        if not report.lang_valid:
+            report.issues.append(Issue(
+                "warning", "lang_invalid",
+                f"Invalid <html lang> value '{report.html_lang}'; it is not a "
+                f"valid BCP 47 language tag and will be ignored."))
     else:
         report.issues.append(Issue("error", "lang_missing",
                                     "Missing lang attribute on <html>; critical for internationalization."))
@@ -334,16 +373,43 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         # Compare on normalized URLs (case-insensitive host, trailing slash
         # insensitive) using each entry's resolved absolute href.
         page_key = _self_ref_key(url)
-        report.hreflang_self_ref = any(
-            _self_ref_key(h.get("abs_href") or h.get("href") or "") == page_key
-            for h in report.hreflang
-        )
+        self_entries = [
+            h for h in report.hreflang
+            if _self_ref_key(h.get("abs_href") or h.get("href") or "") == page_key
+        ]
+        report.hreflang_self_ref = bool(self_entries)
         if not report.hreflang_self_ref:
             report.issues.append(Issue(
                 "warning", "hreflang_no_self_ref",
                 "hreflang set does not reference this page itself; Google "
                 "requires a self-referencing hreflang link, otherwise the "
                 "whole cluster may be ignored."))
+        else:
+            # Cross-signal consistency: the page's own hreflang entry says
+            # "this page is language X" to search engines, while <html lang>
+            # says "this page is language Y" to browsers, screen readers and
+            # translation tools. When X != Y one of them is wrong — a very
+            # common copy-paste bug on templated i18n sites that degrades
+            # both accessibility and international search results.
+            # Only the primary subtag is compared, so "en" vs "en-GB" (a
+            # region-only difference) is deliberately not flagged.
+            self_langs = {
+                _primary_subtag(h.get("hreflang"))
+                for h in self_entries
+                if h.get("hreflang")
+                and h["hreflang"].strip().lower() != "x-default"
+                and _is_valid_hreflang(h.get("hreflang"))
+            }
+            if self_langs and report.html_lang and report.lang_valid:
+                page_lang = _primary_subtag(report.html_lang)
+                report.lang_hreflang_mismatch = page_lang not in self_langs
+                if report.lang_hreflang_mismatch:
+                    report.issues.append(Issue(
+                        "warning", "lang_hreflang_mismatch",
+                        f"<html lang=\"{report.html_lang}\"> disagrees with this "
+                        f"page's own hreflang value(s) "
+                        f"({', '.join(sorted(self_langs))}); browsers and search "
+                        f"engines will infer different languages for this page."))
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
