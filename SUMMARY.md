@@ -80,6 +80,20 @@
 > missing encoded targets are still flagged, and encoded + literal spellings of
 > the same missing target de-duplicate into one record. 53 tests passing.
 
+> **Updated 2026-07-31 (Day 20):** the streak is now 20+ days — a new i18n audit
+> dimension shipped: **language-tag correctness and cross-signal agreement**.
+> `<html lang>` was previously only checked for *presence*; it is now validated
+> as a real BCP 47 tag (`lang_valid` field + `lang_invalid` warning), so
+> `english`, `en_US` or `en-USA` no longer pass silently while browsers and
+> screen readers ignore them. GlobeLens also cross-checks the two language
+> signals a page emits: if the page's own self-referencing hreflang says `de`
+> while `<html lang="en">`, that contradiction is surfaced as
+> `lang_hreflang_mismatch` — a template copy-paste bug that is invisible in
+> review because both values look valid in isolation. Region-only differences
+> (`en-US` vs `en-GB`) are deliberately not flagged, and the shared validator
+> now also accepts script subtags (`zh-Hans`, `zh-Hant-TW`) for both `lang` and
+> `hreflang`. 59 tests passing.
+
 ---
 
 ## 1. What GlobeLens is
@@ -104,7 +118,7 @@ ship sites that are correct across regions and languages.
 | Tool | Signature | What it returns |
 | --- | --- | --- |
 | `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
-| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | i18n-focused subset: `html_lang`, `hreflang` alternates, `x-default`, filtered+sorted issues, `truncated` flag. |
+| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | i18n-focused subset: `html_lang` + `lang_valid`, `hreflang` alternates, `x-default`, `hreflang_self_ref`, `lang_hreflang_mismatch`, filtered+sorted issues, `truncated` flag. |
 | `check_robots_sitemap` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | Whether the site exposes `robots.txt` and `sitemap.xml` (presence + fetch error detail). |
 
 All three accept optional `timeout` / `user_agent` / `verify_ssl` for real
@@ -129,6 +143,10 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
   self-referencing rule** (`hreflang_self_ref` field + `hreflang_no_self_ref`
   warning when the cluster does not list the page itself), catching common real
   mistakes like `en_US` (underscore) or `english` that engines silently ignore.
+- **Language tag correctness** — `<html lang>` validated as a BCP 47 tag
+  (`lang_valid` + `lang_invalid`), script subtags (`zh-Hans`) accepted, and the
+  declared `lang` cross-checked against the page's own hreflang entry
+  (`lang_hreflang_mismatch`); region-only differences are not flagged.
 - **Open Graph / Twitter cards** — `og:title` / `og:description` presence.
 - **`meta robots` / noindex** — parses directives; warns on `noindex`.
 - **JSON-LD structured data** — detects `application/ld+json`; info when missing.
@@ -185,6 +203,7 @@ first.
 | 17 | 2026-07-28 | tool options | per-call `max_bytes` HTML cap (raise for heavy SPAs, lower for fast scans; 1 KiB floor clamp) | **49 passed** |
 | 18 | 2026-07-29 | new audit dim | conflicting `canonical` detection (`canonical_conflict`; first declaration now authoritative) | **51 passed** |
 | 19 | 2026-07-30 | bug fix | percent-decode anchor fragments before matching (kill false `broken_anchors` on CJK/i18n docs sites) | **53 passed** |
+| 20 | 2026-07-31 | new audit dim | `<html lang>` BCP 47 validation (`lang_invalid`) + lang vs. self-hreflang language conflict (`lang_hreflang_mismatch`) | **59 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
