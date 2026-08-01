@@ -23,7 +23,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   (insecure `http://` subresources on HTTPS pages), **broken in-page anchor
   links** (`href="#frag"` pointing to a missing target), **thin-content
   detection** (body word count below a healthy threshold, script/style
-  boilerplate excluded), **conflicting `canonical` detection** (multiple
+  boilerplate excluded, and **script-aware**: Chinese, Japanese and Thai text
+  has no spaces, so it is measured by character count instead of being scored
+  as a single word), **conflicting `canonical` detection** (multiple
   `rel="canonical"` links pointing to *different* URLs — which makes search
   engines ignore the canonical signal entirely; duplicate links resolving to the
   same address are not flagged), plus `robots.txt` /
@@ -59,7 +61,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   anchor checking **percent-decodes fragments before matching** (browsers do the
   same), so encoded non-ASCII anchors like `href="#%E5%BF%AB%E9%80%9F%E5%BC%80%E5%A7%8B"`
   targeting `id="快速开始"` — the norm on CJK/i18n docs sites — are not falsely
-  reported as broken. GlobeLens
+  reported as broken. Word counting is **script-aware** for the same reason: a
+  full-length Chinese or Japanese article is no longer mistaken for a two-word
+  page and flagged as thin content. GlobeLens
   also decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
   audits stay fast and bounded. When a target is unreachable, `audit_url` and

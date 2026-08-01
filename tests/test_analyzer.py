@@ -680,3 +680,69 @@ def test_explicit_fix_overrides_lookup_and_unknown_code_is_empty():
     assert custom.fix == "Custom remedy."  # explicit fix wins over the table
     unknown = Issue("info", "not_a_real_code", "msg")
     assert unknown.fix == ""  # unknown codes degrade gracefully
+
+
+# --- word counting for scripts that do not use spaces -----------------------
+# 23 CJK characters + a full-width period. Chinese text has no word separators,
+# so a naive whitespace split scores a whole article as a single "word".
+_CN_SENTENCE = "国际化站点的搜索引擎优化需要持续投入与细致检查。"
+
+SAMPLE_CN_RICH = (
+    '<!doctype html>\n<html lang="zh-Hans"><head><meta charset="utf-8">\n'
+    "<title>中文长文示例</title></head>\n<body><h1>产品介绍</h1><p>"
+    + _CN_SENTENCE * 30
+    + "</p></body></html>"
+)
+
+
+def test_counts_cjk_text_as_words_instead_of_false_thin_content():
+    r = analyze_html(SAMPLE_CN_RICH, "https://example.com/zh")
+    # 23 chars * 30 sentences + 4 chars in the <h1> = 694 CJK characters,
+    # converted at ~1.7 chars per word -> 408 equivalent words.
+    assert r.word_count == 408
+    assert r.word_count > THIN_CONTENT_MIN_WORDS
+    # a full-length Chinese article must NOT be reported as thin content
+    assert "thin_content" not in [i.code for i in r.issues]
+
+
+def test_counts_japanese_and_still_flags_a_genuinely_thin_cjk_page():
+    jp_sentence = "国際化サイトの検索エンジン最適化には継続的な改善が必要です。"
+    rich_jp = (
+        '<!doctype html>\n<html lang="ja"><head><meta charset="utf-8">\n'
+        "<title>日本語のサンプル</title></head>\n<body><h1>概要</h1><p>"
+        + jp_sentence * 25
+        + "</p></body></html>"
+    )
+    r_rich = analyze_html(rich_jp, "https://example.com/ja")
+    # kana and kanji both count: 29 chars * 25 + 2 in the <h1> = 727 -> 428
+    assert r_rich.word_count == 428
+    assert "thin_content" not in [i.code for i in r_rich.issues]
+
+    # the fix must not silence the check: a genuinely short CJK page is still
+    # flagged, so thin-content detection keeps working for Chinese sites
+    thin_cn = (
+        '<!doctype html>\n<html lang="zh-Hans"><head><meta charset="utf-8">\n'
+        "<title>短页</title></head>\n<body><h1>短页</h1><p>内容不多。</p>"
+        "</body></html>"
+    )
+    r_thin = analyze_html(thin_cn, "https://example.com/zh/short")
+    assert r_thin.word_count == 4  # 6 CJK chars / 1.7, rounded
+    assert "thin_content" in [i.code for i in r_thin.issues]
+
+
+def test_word_count_handles_mixed_scripts_thai_and_punctuation():
+    from globe_lens_mcp.analyzer import THAI_CHARS_PER_WORD, _count_words
+
+    # mixed-language page: Latin words and CJK characters both contribute
+    assert _count_words("Hello world 你好世界") == 4  # 2 + round(4 / 1.7)
+
+    # Thai is space-free too, but its words are longer, so it uses its own ratio
+    thai = "การเพิ่มประสิทธิภาพเว็บไซต์"  # 27 characters
+    assert _count_words(thai * 20) == round(len(thai) * 20 / THAI_CHARS_PER_WORD)
+
+    # punctuation-only tokens are not content in any language
+    assert _count_words("| - • 。、") == 0
+    assert _count_words("   ") == 0
+
+    # regression guard: plain ASCII counting is unchanged
+    assert _count_words("one two three") == 3

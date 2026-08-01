@@ -23,6 +23,66 @@ SEVERITY_RANK = {"error": 3, "warning": 2, "info": 1}
 # search engines demote). Kept as a module constant so it is easy to tune.
 THIN_CONTENT_MIN_WORDS = 300
 
+# Some scripts do not separate words with spaces, so splitting on whitespace
+# counts a whole article as one or two "words" and every such page gets falsely
+# flagged as thin content. For those scripts we count characters and convert to
+# an English-equivalent word count using the ratios below (the same rough
+# convention the translation industry uses).
+#   - Chinese / Japanese: ~1.7 characters per equivalent word.
+#   - Thai: ~4.5 characters per word (an alphabetic, but space-free, script).
+# Korean is NOT in this table on purpose: Hangul text *is* space-separated
+# (eojeol), so the plain whitespace split already produces a sane count.
+CJK_CHARS_PER_WORD = 1.7
+THAI_CHARS_PER_WORD = 4.5
+
+_CJK_RE = re.compile(
+    "["
+    "\u3040-\u30ff"  # Hiragana + Katakana
+    "\u3400-\u4dbf"  # CJK Unified Ideographs Extension A
+    "\u4e00-\u9fff"  # CJK Unified Ideographs
+    "\uf900-\ufaff"  # CJK Compatibility Ideographs
+    "\U00020000-\U0002a6df"  # CJK Unified Ideographs Extension B
+    "]"
+)
+_THAI_RE = re.compile("[\u0e00-\u0e7f]")
+
+# (pattern, characters-per-word) for every space-free script we handle.
+_NO_SPACE_SCRIPTS: tuple[tuple[re.Pattern[str], float], ...] = (
+    (_CJK_RE, CJK_CHARS_PER_WORD),
+    (_THAI_RE, THAI_CHARS_PER_WORD),
+)
+
+
+def _count_words(text: str) -> int:
+    """Count words in a way that also works for space-free scripts.
+
+    Latin-style text is split on whitespace as usual; characters belonging to
+    scripts that do not use spaces (Chinese, Japanese, Thai) are counted and
+    converted to an equivalent word count. Mixed-language pages add up both
+    parts, so a bilingual page is measured fairly.
+    """
+    if not text or not text.strip():
+        return 0
+    total = 0.0
+    remainder = text
+    for pattern, chars_per_word in _NO_SPACE_SCRIPTS:
+        matched = pattern.findall(remainder)
+        if matched:
+            total += len(matched) / chars_per_word
+            # Replace with a space so neighbouring Latin words stay separated.
+            remainder = pattern.sub(" ", remainder)
+    remainder = remainder.strip()
+    if remainder:
+        # Ignore leftover tokens that carry no letters or digits: CJK sentences
+        # leave their punctuation behind ("。", "、"), and navigation separators
+        # ("|", "-", "•") are not content in any language.
+        total += sum(
+            1
+            for token in re.split(r"\s+", remainder)
+            if any(ch.isalnum() for ch in token)
+        )
+    return int(round(total))
+
 # Actionable, copy-paste-friendly fix hint per issue code. The `message` says
 # *what* is wrong; `fix` says *what to do about it* — so an AI agent (or a
 # human) can apply the remedy without first researching the rule. Kept as a
@@ -529,14 +589,16 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     # ("thin content"). We count *visible* body words, deliberately excluding
     # <script>/<style> boilerplate, so an agent can spot pages that need more
     # substance. Pure HTML, network-free, and non-mutating (we don't decompose
-    # tags, so later checks are unaffected).
+    # tags, so later checks are unaffected). Counting is script-aware: Chinese,
+    # Japanese and Thai text has no spaces, so a naive whitespace split would
+    # score a full-length article as ~1 word and flag it as thin.
     body = soup.body or soup
     visible_text = " ".join(
         s
         for s in body.find_all(string=True)
         if s.parent is not None and s.parent.name not in ("script", "style")
     )
-    report.word_count = len(re.split(r"\s+", visible_text.strip())) if visible_text.strip() else 0
+    report.word_count = _count_words(visible_text)
     if report.word_count < THIN_CONTENT_MIN_WORDS:
         report.issues.append(Issue(
             "info", "thin_content",
