@@ -93,6 +93,19 @@
 > (`en-US` vs `en-GB`) are deliberately not flagged, and the shared validator
 > now also accepts script subtags (`zh-Hans`, `zh-Hant-TW`) for both `lang` and
 > `hreflang`. 59 tests passing.
+>
+> **Updated 2026-08-01 (Day 21):** the streak is now 21+ days — another
+> false-positive fix, again aimed at the audience this tool exists for.
+> Thin-content detection counted words by splitting on whitespace, so a
+> full-length **Chinese, Japanese or Thai** article — languages that do not
+> separate words with spaces — scored as one or two words and was flagged
+> `thin_content` every single time. Word counting is now **script-aware**:
+> characters in space-free scripts are counted and converted with per-script
+> ratios (CJK ~1.7 chars/word, Thai ~4.5), Latin text still splits on
+> whitespace, and mixed-language pages add both parts. Korean is deliberately
+> excluded (Hangul *is* space-separated), punctuation-only tokens no longer
+> count as words, and a genuinely short CJK page is still flagged — the fix
+> removes the false positive without silencing the check. 62 tests passing.
 
 ---
 
@@ -204,6 +217,7 @@ first.
 | 18 | 2026-07-29 | new audit dim | conflicting `canonical` detection (`canonical_conflict`; first declaration now authoritative) | **51 passed** |
 | 19 | 2026-07-30 | bug fix | percent-decode anchor fragments before matching (kill false `broken_anchors` on CJK/i18n docs sites) | **53 passed** |
 | 20 | 2026-07-31 | new audit dim | `<html lang>` BCP 47 validation (`lang_invalid`) + lang vs. self-hreflang language conflict (`lang_hreflang_mismatch`) | **59 passed** |
+| 21 | 2026-08-01 | bug fix | script-aware word counting (CJK / Thai pages no longer falsely flagged `thin_content`; punctuation-only tokens ignored) | **62 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -221,7 +235,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 19+ day streak of tested, documented, backward-compatible
+> project with a continuous 21+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
