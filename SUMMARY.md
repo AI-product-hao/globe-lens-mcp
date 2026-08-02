@@ -106,6 +106,18 @@
 > excluded (Hangul *is* space-separated), punctuation-only tokens no longer
 > count as words, and a genuinely short CJK page is still flagged — the fix
 > removes the false positive without silencing the check. 62 tests passing.
+>
+> **Updated 2026-08-02 (Day 22):** the streak is now 22+ days — a new audit
+> dimension: **`<meta http-equiv="refresh">` detection**. With a `url=` target
+> it is a client-side stand-in for a real 301 (it only fires after the page
+> loads and passes weaker ranking signals to the destination) — and it is the
+> classic way i18n sites auto-forward visitors by language. Without a target
+> the page reloads itself on a timer, which fails **WCAG 2.2.1** because the
+> user cannot pause or extend it. The two cases get separate issue codes, the
+> target is resolved to an absolute URL, and content that does not match the
+> real-world shapes (optional delay, optional separator, quoted target, any
+> case) is ignored rather than guessed at — so no redirect is ever invented.
+> 65 tests passing.
 
 ---
 
@@ -218,6 +230,7 @@ first.
 | 19 | 2026-07-30 | bug fix | percent-decode anchor fragments before matching (kill false `broken_anchors` on CJK/i18n docs sites) | **53 passed** |
 | 20 | 2026-07-31 | new audit dim | `<html lang>` BCP 47 validation (`lang_invalid`) + lang vs. self-hreflang language conflict (`lang_hreflang_mismatch`) | **59 passed** |
 | 21 | 2026-08-01 | bug fix | script-aware word counting (CJK / Thai pages no longer falsely flagged `thin_content`; punctuation-only tokens ignored) | **62 passed** |
+| 22 | 2026-08-02 | new audit dim | `<meta http-equiv="refresh">` detection: `meta_refresh_redirect` (client-side redirect, target resolved) + `meta_refresh_reload` (WCAG 2.2.1 timed reload) | **65 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -235,7 +248,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 21+ day streak of tested, documented, backward-compatible
+> project with a continuous 22+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
