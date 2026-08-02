@@ -116,7 +116,20 @@ FIX_HINTS: dict[str, str] = {
     "thin_content": "Add substantive body text (aim for 300+ words) covering the page's topic in depth.",
     "page_truncated": "Re-audit critical sections separately, or reduce the page size (the audit only covers the first part).",
     "canonical_conflict": "Keep a single canonical link pointing to one URL; remove the duplicates or make them all agree on the same address.",
+    "meta_refresh_redirect": 'Replace the <meta http-equiv="refresh"> tag with a real server-side redirect (301 for permanent, 302 for temporary).',
+    "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
 }
+
+# <meta http-equiv="refresh" content="..."> payloads seen in the wild:
+#   "0; url=/en/"      "5"      "0;URL='https://example.com/'"      "url=/en/"
+# The delay is a non-negative integer per the HTML spec, the separator and the
+# quotes around the target are both optional, and everything is case-
+# insensitive. Content that does not match this shape (e.g. junk text) is
+# deliberately ignored rather than guessed at, so we never invent a redirect.
+_META_REFRESH_RE = re.compile(
+    r"^\s*(?P<delay>\d+)?\s*[;,]?\s*(?:url\s*=\s*(?P<url>.+?))?\s*$",
+    re.IGNORECASE,
+)
 
 # A well-formed language tag (BCP 47, as used by both `<html lang>` and
 # hreflang) is an ISO 639-1/639-2 language code (2-3 letters), optionally
@@ -224,6 +237,12 @@ class AuditReport:
     broken_anchors: list[dict[str, str]] = field(default_factory=list)
     mixed_content: list[dict[str, str]] = field(default_factory=list)
     meta_robots: str | None = None
+    # Raw content of <meta http-equiv="refresh"> when present, plus its parsed
+    # parts: delay in seconds, and the absolute redirect target (None when the
+    # tag has no url= and therefore just reloads the page itself).
+    meta_refresh: str | None = None
+    meta_refresh_delay: int | None = None
+    meta_refresh_url: str | None = None
     has_json_ld: bool = False
     canonical: str | None = None
     canonical_url: str | None = None
@@ -482,6 +501,42 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         if "noindex" in directives:
             report.issues.append(Issue("warning", "robots_noindex",
                                        "Page is marked noindex; search engines will exclude it from results."))
+
+    # --- client-side redirect / auto-reload: <meta http-equiv="refresh"> ---
+    # With a `url=` target this is a client-side substitute for a real HTTP 3xx.
+    # Google's guidance is to use a server-side 301 instead: a meta refresh only
+    # fires after the page has loaded (slower, and a visible flash for the
+    # user), and it is a weaker signal for consolidating ranking onto the
+    # destination. It is also the classic way i18n sites auto-forward visitors
+    # by language, which traps crawlers on the redirecting page.
+    # Without a target the page simply reloads itself on a timer, which fails
+    # WCAG 2.2.1 (Timing Adjustable) — the user cannot pause, stop or extend it,
+    # and any work in progress on the page is discarded.
+    meta_refresh = soup.find(
+        "meta", attrs={"http-equiv": lambda v: v and v.lower() == "refresh"}
+    )
+    refresh_content = (meta_refresh.get("content") or "") if meta_refresh else ""
+    if refresh_content.strip():
+        m = _META_REFRESH_RE.match(refresh_content)
+        if m:
+            report.meta_refresh = refresh_content.strip()
+            report.meta_refresh_delay = int(m.group("delay") or 0)
+            # The target may be wrapped in single or double quotes.
+            target = (m.group("url") or "").strip().strip("'\"").strip()
+            if target:
+                report.meta_refresh_url = urljoin(url, target)
+                report.issues.append(Issue(
+                    "warning", "meta_refresh_redirect",
+                    f"Client-side redirect to {report.meta_refresh_url} via "
+                    f"<meta http-equiv=\"refresh\"> after "
+                    f"{report.meta_refresh_delay}s; use a server-side 301/302 "
+                    f"so search engines pass ranking signals to the target."))
+            else:
+                report.issues.append(Issue(
+                    "info", "meta_refresh_reload",
+                    f"Page reloads itself every {report.meta_refresh_delay}s via "
+                    f"<meta http-equiv=\"refresh\">; users cannot pause or "
+                    f"extend it (WCAG 2.2.1 Timing Adjustable)."))
 
     # --- structured data: JSON-LD ---
     json_ld = soup.find_all("script", attrs={"type": "application/ld+json"})

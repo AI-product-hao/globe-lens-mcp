@@ -81,9 +81,9 @@ async def audit_url(
     """Audit a public URL for SEO & internationalization readiness.
 
     Checks title, meta description, html lang, hreflang alternates, OG/Twitter
-    cards, canonical, viewport, charset, H1 structure, image alt coverage, plus
-    robots.txt / sitemap.xml presence. Returns a structured report with a 0-100
-    score and prioritized issues.
+    cards, canonical, viewport, charset, H1 structure, image alt coverage,
+    meta refresh redirects, plus robots.txt / sitemap.xml presence. Returns a
+    structured report with a 0-100 score and prioritized issues.
 
     Redirects are followed; the report is computed against the final URL and
     includes final_url / redirected fields so the agent knows exactly which

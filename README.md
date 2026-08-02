@@ -28,7 +28,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   as a single word), **conflicting `canonical` detection** (multiple
   `rel="canonical"` links pointing to *different* URLs — which makes search
   engines ignore the canonical signal entirely; duplicate links resolving to the
-  same address are not flagged), plus `robots.txt` /
+  same address are not flagged), **`meta refresh` detection**
+  (`<meta http-equiv="refresh" content="0; url=…">` is a client-side redirect
+  that should be a real 301 — it is reported with the target resolved to an
+  absolute URL, while a *targetless* timed self-reload is flagged separately as
+  a WCAG 2.2.1 concern), plus `robots.txt` /
   `sitemap.xml` presence. Returns a **0–100 score** and **issues sorted by
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
   > `info`) **and an actionable `fix` hint** (a concrete remedy such as the

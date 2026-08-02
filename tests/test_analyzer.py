@@ -746,3 +746,78 @@ def test_word_count_handles_mixed_scripts_thai_and_punctuation():
 
     # regression guard: plain ASCII counting is unchanged
     assert _count_words("one two three") == 3
+
+
+SAMPLE_META_REFRESH = """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="refresh" content="0; url=/en/">
+  <title>Redirecting…</title>
+</head>
+<body><h1>Redirecting</h1></body>
+</html>"""
+
+
+def test_flags_meta_refresh_redirect_and_resolves_target():
+    r = analyze_html(SAMPLE_META_REFRESH, "https://example.com/old")
+    codes = [i.code for i in r.issues]
+    assert "meta_refresh_redirect" in codes
+    # a redirect is not a self-reload; only one of the two may fire
+    assert "meta_refresh_reload" not in codes
+    assert r.meta_refresh == "0; url=/en/"
+    assert r.meta_refresh_delay == 0
+    # relative targets are resolved against the page URL, like every other link
+    assert r.meta_refresh_url == "https://example.com/en/"
+    issue = next(i for i in r.issues if i.code == "meta_refresh_redirect")
+    assert "https://example.com/en/" in issue.message
+    assert "301" in issue.fix
+
+
+def test_flags_timed_self_reload_and_parses_quoted_uppercase_target():
+    # no url= : the page just reloads itself on a timer (WCAG 2.2.1)
+    reload_html = (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        '<meta http-equiv="Refresh" content="30">'
+        "<title>Live dashboard</title></head><body><h1>Stats</h1></body></html>"
+    )
+    r = analyze_html(reload_html, "https://example.com/dashboard")
+    codes = [i.code for i in r.issues]
+    assert "meta_refresh_reload" in codes
+    assert "meta_refresh_redirect" not in codes
+    assert r.meta_refresh_delay == 30
+    assert r.meta_refresh_url is None
+
+    # real pages write the target quoted and the key uppercased
+    quoted = (
+        '<!doctype html>\n<html lang="en"><head><meta charset="utf-8">'
+        "<meta http-equiv=\"refresh\" content=\"5;URL='https://example.com/de/'\">"
+        "<title>Weiterleitung</title></head><body><h1>Hi</h1></body></html>"
+    )
+    r2 = analyze_html(quoted, "https://example.com/")
+    assert r2.meta_refresh_delay == 5
+    assert r2.meta_refresh_url == "https://example.com/de/"
+    assert "meta_refresh_redirect" in [i.code for i in r2.issues]
+
+
+def test_no_meta_refresh_is_not_flagged_and_content_type_is_untouched():
+    r = analyze_html(SAMPLE_GOOD, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "meta_refresh_redirect" not in codes
+    assert "meta_refresh_reload" not in codes
+    assert r.meta_refresh is None
+    assert r.meta_refresh_url is None
+
+    # the neighbouring http-equiv lookup must not be confused by this check:
+    # a legacy Content-Type declaration is still read as a charset, not as a
+    # refresh, and junk content is ignored rather than guessed into a redirect
+    legacy = (
+        '<!doctype html>\n<html lang="en"><head>'
+        '<meta http-equiv="Content-Type" content="text/html; charset=gb2312">'
+        '<meta http-equiv="refresh" content="not a refresh directive">'
+        "<title>Legacy</title></head><body><h1>Hi</h1></body></html>"
+    )
+    r2 = analyze_html(legacy, "https://example.com/legacy")
+    assert r2.charset == "gb2312"
+    assert r2.meta_refresh is None
+    assert not [i.code for i in r2.issues if i.code.startswith("meta_refresh")]
