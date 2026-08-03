@@ -118,6 +118,21 @@
 > real-world shapes (optional delay, optional separator, quoted target, any
 > case) is ignored rather than guessed at — so no redirect is ever invented.
 > 65 tests passing.
+>
+> **Updated 2026-08-03 (Day 23):** the streak is now 23+ days — the fourth
+> false-positive cleanup in this series. Mixed-content scanning read `href`
+> from *every* `<link>` tag, so an `http://` `canonical`, `hreflang`
+> alternate, `prev`/`next` or `preconnect` hint was reported as an insecure
+> subresource — none of which the browser ever loads as a page subresource.
+> On a site that migrated to HTTPS but still declares legacy `http://`
+> metadata URLs (very common, and worst on multilingual sites where every
+> hreflang adds a phantom warning) this buried the genuinely blocked
+> stylesheets and icons in noise. The `<link>` branch is now restricted to
+> rel values that really trigger a fetch (`stylesheet`, `icon`, `preload`,
+> `modulepreload`, `prefetch`, `prerender`, `manifest`, …); `preconnect` and
+> `dns-prefetch` are deliberately excluded because they only warm up DNS/TCP.
+> The tags are still parsed for canonical/hreflang analysis — only the
+> mixed-content verdict is skipped. 67 tests passing.
 
 ---
 
@@ -178,7 +193,11 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
 - **H1 structure** — missing or multiple (a11y / document structure).
 - **Image `alt` coverage** — counts images and those missing `alt`.
 - **Mixed content** — plaintext `http://` subresources on HTTPS pages (with
-  tag/attr/url for each), correctly ignoring relative & protocol-relative URLs.
+  tag/attr/url for each), correctly ignoring relative & protocol-relative URLs,
+  and only inspecting `<link>` rels the browser actually fetches (`stylesheet`,
+  `icon`, `preload`, `manifest`, …) so metadata links (`canonical`, `hreflang`,
+  `prev`/`next`) and connection hints (`preconnect`, `dns-prefetch`) are not
+  miscounted.
 - **Broken in-page anchors** — `href="#frag"` links whose target `id`/`name` does
   not exist in the document (they look fine in source but do nothing on click).
 - **Thin content** — visible body word count (script/style boilerplate excluded)
@@ -231,6 +250,7 @@ first.
 | 20 | 2026-07-31 | new audit dim | `<html lang>` BCP 47 validation (`lang_invalid`) + lang vs. self-hreflang language conflict (`lang_hreflang_mismatch`) | **59 passed** |
 | 21 | 2026-08-01 | bug fix | script-aware word counting (CJK / Thai pages no longer falsely flagged `thin_content`; punctuation-only tokens ignored) | **62 passed** |
 | 22 | 2026-08-02 | new audit dim | `<meta http-equiv="refresh">` detection: `meta_refresh_redirect` (client-side redirect, target resolved) + `meta_refresh_reload` (WCAG 2.2.1 timed reload) | **65 passed** |
+| 23 | 2026-08-03 | bug fix | mixed content now only inspects `<link>` rels the browser actually fetches (no more false positives on `http://` canonical / hreflang / prev-next / preconnect) | **67 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -248,7 +268,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 22+ day streak of tested, documented, backward-compatible
+> project with a continuous 23+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
