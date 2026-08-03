@@ -67,7 +67,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   targeting `id="快速开始"` — the norm on CJK/i18n docs sites — are not falsely
   reported as broken. Word counting is **script-aware** for the same reason: a
   full-length Chinese or Japanese article is no longer mistaken for a two-word
-  page and flagged as thin content. GlobeLens
+  page and flagged as thin content. Mixed-content scanning only looks at
+  `<link>` tags the browser actually **fetches** (`stylesheet`, `icon`,
+  `preload`, `manifest`, …), so an `http://` `canonical`, `hreflang` alternate,
+  `prev`/`next` or `preconnect` hint is never miscounted as an insecure
+  subresource. GlobeLens
   also decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
   audits stay fast and bounded. When a target is unreachable, `audit_url` and

@@ -222,6 +222,52 @@ def test_no_mixed_content_for_relative_or_http_page():
     assert "mixed_content" not in [i.code for i in http_page.issues]
 
 
+SAMPLE_METADATA_LINKS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Metadata links over http</title>
+<link rel="canonical" href="http://example.com/">
+<link rel="alternate" hreflang="de" href="http://example.com/de">
+<link rel="alternate" hreflang="x-default" href="http://example.com/">
+<link rel="prev" href="http://example.com/page/1">
+<link rel="next" href="http://example.com/page/3">
+<link rel="preconnect" href="http://cdn.example.com">
+<link rel="dns-prefetch" href="http://cdn.example.com">
+<link rel="author" href="http://example.com/about">
+<link href="http://example.com/no-rel">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_metadata_links_are_not_mixed_content():
+    # None of these <link> rel values make the browser fetch a subresource, so
+    # an http:// href on them must never be reported as mixed content.
+    r = analyze_html(SAMPLE_METADATA_LINKS, "https://example.com")
+    assert r.mixed_content == []
+    assert "mixed_content" not in [i.code for i in r.issues]
+    # the tags are still parsed normally — we skipped them only for the
+    # mixed-content check, we did not stop reading them
+    assert r.canonical == "http://example.com/"
+    assert len(r.hreflang) == 2
+
+
+def test_fetching_link_rels_are_still_flagged_as_mixed_content():
+    r = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8"><title>fetching rels</title>'
+        '<link rel="stylesheet" href="http://cdn.example.com/style.css">'
+        '<link rel="shortcut icon" href="http://cdn.example.com/favicon.ico">'
+        '<link rel="preload" as="font" href="http://cdn.example.com/f.woff2">'
+        '<link rel="manifest" href="http://cdn.example.com/app.webmanifest">'
+        # not fetched by the browser -> must not be counted
+        '<link rel="canonical" href="http://example.com/">'
+        '</head><body><h1>Hi</h1></body></html>',
+        "https://example.com",
+    )
+    assert "mixed_content" in [i.code for i in r.issues]
+    urls = [m["url"] for m in r.mixed_content]
+    assert len(urls) == 4
+    assert "http://example.com/" not in urls
+    assert all(m["tag"] == "link" and m["attr"] == "href" for m in r.mixed_content)
+
+
 SAMPLE_ANCHORS = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Anchor Demo</title></head><body>

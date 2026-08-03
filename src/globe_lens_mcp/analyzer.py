@@ -271,8 +271,34 @@ def _rel_values(tag) -> list[str]:
     if not rel:
         return []
     if isinstance(rel, str):
-        return [rel.lower()]
+        return [r.lower() for r in rel.split()]
     return [r.lower() for r in rel]
+
+
+# <link> rel values that make the browser actually FETCH a subresource.
+# Everything else on <link> is metadata or a connection hint that is never
+# loaded into the page: canonical, alternate/hreflang, prev/next, author, me,
+# license, search, and the preconnect / dns-prefetch hints (which only warm up
+# DNS/TCP and are explicitly not mixed content). An http:// href on those must
+# never be reported as mixed content.
+FETCHING_LINK_RELS: frozenset[str] = frozenset({
+    "stylesheet",
+    "icon",                            # also covers rel="shortcut icon"
+    "apple-touch-icon",
+    "apple-touch-icon-precomposed",
+    "mask-icon",
+    "fluid-icon",
+    "preload",
+    "modulepreload",
+    "prefetch",
+    "prerender",
+    "manifest",
+})
+
+
+def _link_fetches_subresource(tag) -> bool:
+    """True when a <link> tag causes the browser to load a subresource."""
+    return bool(set(_rel_values(tag)) & FETCHING_LINK_RELS)
 
 
 def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
@@ -572,10 +598,16 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     # these silently break rendering and erode user trust / SEO. Only flag when
     # the page itself is served over HTTPS (relative and protocol-relative URLs
     # such as "/x.png" or "//x.png" inherit HTTPS and are NOT mixed content).
+    # For <link> we only consider rel values that actually fetch a subresource
+    # (stylesheet, icon, preload, manifest, …) — an http:// canonical, hreflang
+    # alternate or preconnect hint is never loaded by the browser and reporting
+    # it here would be a false positive.
     if urlparse(url).scheme == "https":
         for tag in soup.find_all(
             ["img", "script", "link", "iframe", "source", "audio", "video", "embed"]
         ):
+            if tag.name == "link" and not _link_fetches_subresource(tag):
+                continue
             attr = "href" if tag.name == "link" else "src"
             val = tag.get(attr)
             if not isinstance(val, str):
