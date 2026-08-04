@@ -367,6 +367,118 @@ def test_check_i18n_exposes_final_url_after_redirect():
     assert "hreflang_no_self_ref" not in codes
 
 
+# ---------------------------------------------------------------------------
+# follow_redirects=False: inspect the URL itself instead of its destination.
+# ---------------------------------------------------------------------------
+
+
+def test_audit_url_reports_redirect_without_following():
+    # Migration QA: the agent wants to know *that* /old redirects and *where*
+    # to — following the hop would silently audit the destination instead and
+    # hide the status code (301 vs 302 is a real SEO difference).
+    seen: list = []
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_redirecting_transport(seen), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/old", follow_redirects=False
+        ))
+
+    assert result["ok"] is True
+    assert result["status_code"] == 301
+    assert result["redirect_to"] == "https://example.com/en/"
+    assert result["followed_redirects"] is False
+    assert result["redirected"] is False
+    # the hop was NOT taken, and no page report leaks out
+    assert seen == ["https://example.com/old"]
+    assert "html_lang" not in result
+    assert "score" not in result
+
+
+def test_audit_url_resolves_relative_redirect_location():
+    # Location headers are frequently relative ("/en/"); the agent should get
+    # an absolute target it can audit directly, not a bare path.
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(302, headers={"location": "/en/"})
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/de/old", follow_redirects=False
+        ))
+
+    assert result["status_code"] == 302
+    assert result["redirect_to"] == "https://example.com/en/"
+
+
+def test_robots_probe_still_follows_redirects_when_page_does_not():
+    # follow_redirects=False is about the *page*. Crawlers follow robots.txt
+    # redirects (http -> https, apex -> www), so a redirecting robots.txt must
+    # still be reported as present — otherwise the option would introduce a
+    # false "missing robots.txt".
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            if request.url.host == "www.example.com":
+                return httpx.Response(200, text="User-agent: *")
+            return httpx.Response(301, headers={
+                "location": "https://www.example.com/robots.txt"})
+        if request.url.path == "/sitemap.xml":
+            return httpx.Response(404)
+        return httpx.Response(200, text=SAMPLE)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/", follow_redirects=False
+        ))
+
+    assert result["followed_redirects"] is False
+    assert result["has_robots_txt"] is True   # redirected robots.txt still found
+    assert result["has_sitemap"] is False
+    assert result["title"] == "Options Test"  # the page itself was audited
+
+
+def test_check_i18n_reports_redirect_without_following():
+    # Locale routing QA: does "/" really forward to "/en/"?
+    seen: list = []
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_redirecting_transport(seen), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n(
+            "https://example.com/old", follow_redirects=False
+        ))
+
+    assert result["ok"] is True
+    assert result["status_code"] == 301
+    assert result["redirect_to"] == "https://example.com/en/"
+    assert result["followed_redirects"] is False
+    assert "hreflang" not in result
+
+
+def test_following_redirects_stays_the_default():
+    # Backwards compatibility: callers that omit the flag keep the old
+    # behaviour (hop followed, destination audited).
+    seen: list = []
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_redirecting_transport(seen), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com/old"))
+
+    assert result["followed_redirects"] is True
+    assert result["final_url"] == "https://example.com/en/"
+    assert "redirect_to" not in result
+
+
 # --- lang validity / lang-vs-hreflang agreement surfaced by check_i18n ---
 LANG_CONFLICT_PAGE = """<!doctype html>
 <html lang="english"><head><meta charset="utf-8">

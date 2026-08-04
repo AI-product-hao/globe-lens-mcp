@@ -150,11 +150,36 @@ and for matching how real users or crawlers see your pages:
 | `user_agent` | GlobeLens bot | Override the UA to mimic a browser or a specific crawler. |
 | `verify_ssl` | `true` | Set `false` to audit staging sites with self-signed certs. |
 | `max_bytes` | `2097152` (2 MiB) | Cap on the HTML fed to the parser (`audit_url` / `check_i18n`). Raise it to fully audit heavy SPA pages; lower it to keep audits of huge pages fast. Values below 1 KiB are clamped up, and truncation is always flagged (`page_truncated` / `truncated`). |
+| `follow_redirects` | `true` | Set `false` to inspect the URL *itself* instead of the page it forwards to (`audit_url` / `check_i18n`). |
 
 ```json
 { "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
 { "url": "https://heavy-spa.example.com", "max_bytes": 8388608 }
+{ "url": "https://example.com/old-page", "follow_redirects": false }
 ```
+
+### Inspecting a redirect instead of following it
+
+By default GlobeLens follows redirects and audits the destination (reporting
+`final_url` / `redirected`). With `follow_redirects: false` it stops at the
+first hop and reports it verbatim — useful to verify a migration really returns
+**301** and not 302, or to confirm that `/` forwards to the intended locale
+instead of silently auditing whichever language version you land on:
+
+```json
+{
+  "ok": true,
+  "url": "https://example.com/old-page",
+  "status_code": 301,
+  "redirect_to": "https://example.com/en/new-page",
+  "followed_redirects": false
+}
+```
+
+Relative `Location` headers are resolved to absolute URLs, so the target can be
+fed straight back into `audit_url`. The `robots.txt` / `sitemap.xml` probes keep
+following redirects (crawlers do too), so this option never produces a false
+"missing robots.txt".
 
 ## Develop
 

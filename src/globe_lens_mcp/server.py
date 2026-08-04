@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import httpx
 from dataclasses import asdict
+from urllib.parse import urljoin
+
 from fastmcp import FastMCP
 
 from .analyzer import analyze_html, robots_sitemap_urls
@@ -70,6 +72,41 @@ def _http_error_result(url: str, status_code: int | None, message: str) -> dict:
     }
 
 
+def _is_redirect(resp: httpx.Response) -> bool:
+    """True for a 3xx response that actually carries a Location header.
+
+    The header check matters: 304 Not Modified is a 3xx but is not a redirect,
+    and a malformed 3xx without Location has nowhere to send us.
+    """
+    return 300 <= resp.status_code < 400 and "location" in resp.headers
+
+
+def _redirect_stop_result(url: str, resp: httpx.Response) -> dict:
+    """Report a redirect verbatim instead of following it.
+
+    Returned when the caller passed follow_redirects=False and the server
+    answered with a 3xx. There is no page body to audit, so instead of a
+    useless empty report (or the HTTP error a bare raise_for_status would
+    produce for a 3xx) we hand the agent exactly what it asked to see: the
+    status code and the resolved target.
+    """
+    location = resp.headers.get("location", "")
+    return {
+        "ok": True,
+        "url": url,
+        "final_url": str(resp.url),
+        "followed_redirects": False,
+        "redirected": False,
+        "status_code": resp.status_code,
+        "redirect_to": urljoin(str(resp.url), location) if location else None,
+        "note": (
+            "Server returned a redirect and follow_redirects=false, so no page "
+            "was analyzed. Audit the target directly, or re-run with "
+            "follow_redirects=true to audit the destination page."
+        ),
+    }
+
+
 @mcp.tool()
 async def audit_url(
     url: str,
@@ -77,6 +114,7 @@ async def audit_url(
     user_agent: str | None = None,
     verify_ssl: bool = True,
     max_bytes: int | None = None,
+    follow_redirects: bool = True,
 ) -> dict:
     """Audit a public URL for SEO & internationalization readiness.
 
@@ -85,9 +123,9 @@ async def audit_url(
     meta refresh redirects, plus robots.txt / sitemap.xml presence. Returns a
     structured report with a 0-100 score and prioritized issues.
 
-    Redirects are followed; the report is computed against the final URL and
-    includes final_url / redirected fields so the agent knows exactly which
-    page was analyzed.
+    Redirects are followed by default; the report is computed against the final
+    URL and includes final_url / redirected fields so the agent knows exactly
+    which page was analyzed.
 
     Args:
         url: The page to audit.
@@ -100,19 +138,26 @@ async def audit_url(
             Raise it to fully audit heavy SPA pages, or lower it to keep
             audits of huge pages fast. Values below 1 KiB are clamped up;
             truncation is always flagged via page_truncated.
+        follow_redirects: Set False to inspect the URL itself instead of the
+            page it forwards to. Useful to verify a migration really returns
+            301 (not 302) to the right target, or to see the language redirect
+            on `/` rather than always landing on one locale. On a 3xx the tool
+            then returns status_code + redirect_to instead of a page report.
     """
     headers = {
         "user-agent": user_agent
         or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
     }
     async with httpx.AsyncClient(
-        follow_redirects=True,
+        follow_redirects=follow_redirects,
         timeout=timeout,
         headers=headers,
         verify=verify_ssl,
     ) as client:
         try:
             resp = await client.get(url)
+            if not follow_redirects and _is_redirect(resp):
+                return _redirect_stop_result(url, resp)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return _http_error_result(
@@ -131,13 +176,18 @@ async def audit_url(
         text, truncated = _decode_response(resp, _effective_max_bytes(max_bytes))
         report = analyze_html(text, final_url, truncated=truncated)
         robots_url, sitemap_url = robots_sitemap_urls(final_url)
+        # These probes always follow redirects, even when the page request did
+        # not: crawlers follow robots.txt/sitemap.xml redirects too, so a site
+        # that serves them via http -> https or apex -> www must not be
+        # reported as "missing" just because the caller wanted to see the
+        # page's own redirect.
         try:
-            r = await client.get(robots_url)
+            r = await client.get(robots_url, follow_redirects=True)
             report.has_robots_txt = r.status_code == 200
         except Exception:
             report.has_robots_txt = None
         try:
-            s = await client.get(sitemap_url)
+            s = await client.get(sitemap_url, follow_redirects=True)
             report.has_sitemap = s.status_code == 200
         except Exception:
             report.has_sitemap = None
@@ -145,6 +195,7 @@ async def audit_url(
         out["url"] = url  # what the caller asked for, kept for traceability
         out["final_url"] = final_url
         out["redirected"] = redirected
+        out["followed_redirects"] = follow_redirects
         return out
 
 
@@ -155,6 +206,7 @@ async def check_i18n(
     user_agent: str | None = None,
     verify_ssl: bool = True,
     max_bytes: int | None = None,
+    follow_redirects: bool = True,
 ) -> dict:
     """Focused check of internationalization signals.
 
@@ -170,19 +222,25 @@ async def check_i18n(
         max_bytes: Cap on the HTML size fed to the parser (default 2 MiB).
             Values below 1 KiB are clamped up; truncation is reported via the
             truncated flag in the result.
+        follow_redirects: Set False to inspect the URL itself rather than the
+            page it forwards to — e.g. to confirm that `/` really redirects to
+            `/en/` for an English visitor instead of silently auditing one
+            locale. On a 3xx the tool returns status_code + redirect_to.
     """
     headers = {
         "user-agent": user_agent
         or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
     }
     async with httpx.AsyncClient(
-        follow_redirects=True,
+        follow_redirects=follow_redirects,
         timeout=timeout,
         headers=headers,
         verify=verify_ssl,
     ) as client:
         try:
             resp = await client.get(url)
+            if not follow_redirects and _is_redirect(resp):
+                return _redirect_stop_result(url, resp)
             resp.raise_for_status()
         except httpx.HTTPStatusError as e:
             return _http_error_result(
@@ -203,6 +261,7 @@ async def check_i18n(
             "url": url,
             "final_url": final_url,
             "redirected": redirected,
+            "followed_redirects": follow_redirects,
             "html_lang": report.html_lang,
             "lang_valid": report.lang_valid,
             "lang_hreflang_mismatch": report.lang_hreflang_mismatch,
