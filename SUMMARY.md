@@ -133,6 +133,20 @@
 > `dns-prefetch` are deliberately excluded because they only warm up DNS/TCP.
 > The tags are still parsed for canonical/hreflang analysis — only the
 > mixed-content verdict is skipped. 67 tests passing.
+>
+> **Updated 2026-08-04 (Day 24):** the streak is now 24+ days — a new tool
+> option: **`follow_redirects`** on `audit_url` / `check_i18n`. GlobeLens has
+> always followed redirects and audited the destination (Day 15), which is the
+> right default but made one real question unanswerable: *what does this URL
+> itself do?* Migration QA needs to see **301 vs 302** on the old URL, and an
+> i18n site needs to confirm `/` forwards to the intended locale rather than
+> quietly auditing whichever language version it lands on. Set the flag to
+> `false` and the tool stops at the first hop, returning `status_code` +
+> `redirect_to` (relative `Location` headers resolved to absolute, so the
+> target can be fed straight back in) instead of a page report. The
+> `robots.txt` / `sitemap.xml` probes keep following redirects — crawlers do
+> too, so the option cannot introduce a false "missing robots.txt".
+> 72 tests passing.
 
 ---
 
@@ -251,6 +265,7 @@ first.
 | 21 | 2026-08-01 | bug fix | script-aware word counting (CJK / Thai pages no longer falsely flagged `thin_content`; punctuation-only tokens ignored) | **62 passed** |
 | 22 | 2026-08-02 | new audit dim | `<meta http-equiv="refresh">` detection: `meta_refresh_redirect` (client-side redirect, target resolved) + `meta_refresh_reload` (WCAG 2.2.1 timed reload) | **65 passed** |
 | 23 | 2026-08-03 | bug fix | mixed content now only inspects `<link>` rels the browser actually fetches (no more false positives on `http://` canonical / hreflang / prev-next / preconnect) | **67 passed** |
+| 24 | 2026-08-04 | tool options | optional `follow_redirects` — stop at the first hop and report `status_code` + resolved `redirect_to` (301-vs-302 migration QA, locale routing); robots/sitemap probes still follow | **72 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -268,7 +283,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 23+ day streak of tested, documented, backward-compatible
+> project with a continuous 24+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
