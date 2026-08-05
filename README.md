@@ -21,7 +21,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**
   (insecure `http://` subresources on HTTPS pages), **broken in-page anchor
-  links** (`href="#frag"` pointing to a missing target), **thin-content
+  links** (`href="#frag"` pointing to a missing target), **unsafe external
+  `target="_blank"` links** (cross-origin links that open a new tab without
+  `rel="noopener noreferrer"` — reverse-tabnabbing / Lighthouse "unsafe
+  links"), **thin-content
   detection** (body word count below a healthy threshold, script/style
   boilerplate excluded, and **script-aware**: Chinese, Japanese and Thai text
   has no spaces, so it is measured by character count instead of being scored
