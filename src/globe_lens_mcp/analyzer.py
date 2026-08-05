@@ -118,6 +118,7 @@ FIX_HINTS: dict[str, str] = {
     "canonical_conflict": "Keep a single canonical link pointing to one URL; remove the duplicates or make them all agree on the same address.",
     "meta_refresh_redirect": 'Replace the <meta http-equiv="refresh"> tag with a real server-side redirect (301 for permanent, 302 for temporary).',
     "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
+    "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
 }
 
 # <meta http-equiv="refresh" content="..."> payloads seen in the wild:
@@ -235,6 +236,10 @@ class AuditReport:
     images_total: int = 0
     images_missing_alt: int = 0
     broken_anchors: list[dict[str, str]] = field(default_factory=list)
+    # External <a target="_blank"> links that open a new tab without
+    # rel="noopener noreferrer": they leak window.opener (reverse tabnabbing)
+    # and waste resources. Each entry carries the raw href and visible text.
+    unsafe_blank_links: list[dict[str, str]] = field(default_factory=list)
     mixed_content: list[dict[str, str]] = field(default_factory=list)
     meta_robots: str | None = None
     # Raw content of <meta http-equiv="refresh"> when present, plus its parsed
@@ -670,6 +675,50 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             "warning", "broken_anchors",
             f"Found {len(report.broken_anchors)} in-page anchor link(s) pointing to a "
             f"missing #fragment target; they do nothing when clicked."))
+
+    # --- insecure cross-origin new-tab links (reverse tabnabbing) ---
+    # An <a target="_blank"> whose rel lacks "noopener"/"noreferrer" lets the
+    # page it opens reach back into window.opener and redirect the original tab
+    # (a classic "reverse tabnabbing" phishing vector), and it costs the opener
+    # a process. This is the well-known Lighthouse "unsafe links" audit. Only a
+    # *cross-origin* web navigation (http/https to a different host) carries the
+    # risk: same-origin links and non-http(s) hrefs (mailto:, tel:, javascript:,
+    # in-page #anchors) cannot leak an opener, so we scope to cross-origin http(s)
+    # links to avoid false positives. A link that is already protected by
+    # rel="noopener" or rel="noreferrer" is skipped.
+    page_parsed = urlparse(url)
+    page_origin = (
+        f"{page_parsed.scheme.lower()}://{page_parsed.netloc.lower()}"
+        if page_parsed.scheme in ("http", "https") and page_parsed.netloc
+        else None
+    )
+    for a in soup.find_all("a"):
+        if (a.get("target") or "").strip().lower() != "_blank":
+            continue
+        href = a.get("href")
+        if not isinstance(href, str) or not href.strip():
+            continue
+        href = href.strip()
+        link_parsed = urlparse(urljoin(url, href))
+        if link_parsed.scheme not in ("http", "https"):
+            continue  # not a web navigation (mailto:, javascript:, #anchor…)
+        if page_origin is None:
+            continue  # cannot decide same vs cross origin; skip to stay safe
+        link_origin = f"{link_parsed.scheme.lower()}://{link_parsed.netloc.lower()}"
+        if link_origin == page_origin:
+            continue  # same origin: no opener-leak risk
+        if "noopener" in _rel_values(a) or "noreferrer" in _rel_values(a):
+            continue  # already protected
+        report.unsafe_blank_links.append({
+            "href": href,
+            "text": (a.get_text() or "").strip()[:80],
+        })
+    if report.unsafe_blank_links:
+        report.issues.append(Issue(
+            "warning", "unsafe_blank_link",
+            f"Found {len(report.unsafe_blank_links)} external target=\"_blank\" "
+            f"link(s) without rel=\"noopener noreferrer\"; they expose "
+            f"window.opener (reverse tabnabbing) and waste resources."))
 
     # --- content depth: thin-content / body word count ---
     # Search engines treat pages with very little original text as low-value

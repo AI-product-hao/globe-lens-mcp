@@ -867,3 +867,48 @@ def test_no_meta_refresh_is_not_flagged_and_content_type_is_untouched():
     assert r2.charset == "gb2312"
     assert r2.meta_refresh is None
     assert not [i.code for i in r2.issues if i.code.startswith("meta_refresh")]
+
+
+# --- external target="_blank" links without rel=noopener/noreferrer ---
+# A new tab opened to another origin without rel="noopener" can reach back
+# through window.opener (reverse tabnabbing). Our check must fire only for
+# *cross-origin* http(s) links that lack the protection — same-origin and
+# already-protected links, and non-http(s) hrefs, must never be flagged.
+SAMPLE_UNSAFE_BLANK = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Unsafe Blank Links</title></head>
+<body>
+  <a href="https://other.com" target="_blank">External, unprotected</a>
+  <a href="https://other.com/page" target="_blank">Another unprotected</a>
+  <a href="https://example.com/internal" target="_blank">Same origin, safe</a>
+  <a href="https://other.com/ok" target="_blank" rel="noopener noreferrer">External, safe</a>
+  <a href="mailto:x@other.com" target="_blank">Mailto, safe</a>
+</body></html>"""
+
+
+def test_flags_unsafe_external_blank_links():
+    r = analyze_html(SAMPLE_UNSAFE_BLANK, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "unsafe_blank_link" in codes
+    # exactly the two genuinely cross-origin, unprotected links are flagged
+    assert len(r.unsafe_blank_links) == 2
+    hrefs = {e["href"] for e in r.unsafe_blank_links}
+    assert hrefs == {"https://other.com", "https://other.com/page"}
+
+
+SAMPLE_SAFE_LINKS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Safe Links</title></head>
+<body>
+  <a href="https://example.com/a">same origin, no target</a>
+  <a href="https://other.com" rel="noopener">external already protected</a>
+  <a href="//other.com/rel" target="_blank" rel="noreferrer">protocol-relative, protected</a>
+  <a href="https://other.com/x" target="_blank">EXPECT FLAG</a>
+</body></html>"""
+
+
+def test_only_unprotected_cross_origin_blank_links_flagged():
+    r = analyze_html(SAMPLE_SAFE_LINKS, "https://example.com")
+    # only the single cross-origin link without noopener/noreferrer is flagged;
+    # links without target="_blank", same-origin links, and links already
+    # carrying rel="noopener"/"noreferrer" (incl. protocol-relative) are not.
+    assert len(r.unsafe_blank_links) == 1
+    assert r.unsafe_blank_links[0]["href"] == "https://other.com/x"
