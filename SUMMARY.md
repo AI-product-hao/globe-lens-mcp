@@ -159,6 +159,17 @@
 > `rel="noopener"`/`noreferrer` (including protocol-relative `//other.com`)
 > are correctly not flagged, so no false positive on ordinary sites. 74 tests
 > passing.
+>
+> **Updated 2026-08-06 (Day 26):** the streak is now 26+ days — a probe
+> accuracy fix: **`robots.txt` / `sitemap.xml` no longer trust a bare `200`**.
+> Hosts with a catch-all rewrite (Vercel, Netlify, Cloudflare Pages — i.e. most
+> SPA deployments, and most indie AI products) answer 200 with `index.html` for
+> every unknown path, so GlobeLens was reporting both files as present on sites
+> that had neither: a false positive that hid the exact SEO gap the probe
+> exists to catch. Responses are now sniffed (content type + body head) and the
+> HTML fallback page is rejected, while an *empty* robots.txt still counts as
+> present. A failed probe now reports `found: null` ("unknown") instead of
+> `false`, and the raw `status_code` is surfaced. 79 tests passing.
 
 ---
 
@@ -283,6 +294,7 @@ first.
 | 23 | 2026-08-03 | bug fix | mixed content now only inspects `<link>` rels the browser actually fetches (no more false positives on `http://` canonical / hreflang / prev-next / preconnect) | **67 passed** |
 | 24 | 2026-08-04 | tool options | optional `follow_redirects` — stop at the first hop and report `status_code` + resolved `redirect_to` (301-vs-302 migration QA, locale routing); robots/sitemap probes still follow | **72 passed** |
 | 25 | 2026-08-05 | new audit dim | unsafe external `target="_blank"` link detection (cross-origin links without `rel="noopener noreferrer"`; reverse-tabnabbing / Lighthouse "unsafe links") | **74 passed** |
+| 26 | 2026-08-06 | bug fix | robots.txt / sitemap.xml probes stop trusting a bare `200` (SPA catch-all rewrites served `index.html` and looked like real files); failed probe now reports `found: null`, not `false` | **79 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -330,7 +342,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 25 days, 25+ real commits, 74 passing tests. GlobeLens now validates hreflang
+> 26 days, 26+ real commits, 79 passing tests. GlobeLens now validates hreflang
 > codes, flags thin content, broken anchors, mixed content, unsafe target="_blank"
 > links, noindex… and returns SEO issues *sorted by severity* so your agent fixes
 > the urgent stuff first. Small, tested, documented — the kind of OSS I wish more
