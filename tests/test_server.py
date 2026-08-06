@@ -505,3 +505,121 @@ def test_check_i18n_exposes_lang_validity_and_related_issues():
     assert result["lang_hreflang_mismatch"] is None
     # the issue filter must let lang_* codes through, not just hreflang*
     assert "lang_invalid" in [i["code"] for i in result["issues"]]
+
+
+# ---------------------------------------------------------------------------
+# robots.txt / sitemap.xml probes: a 200 is not proof the file exists.
+# ---------------------------------------------------------------------------
+
+SPA_FALLBACK = (
+    '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
+    "<title>My App</title></head><body><div id=\"root\"></div></body></html>"
+)
+
+REAL_ROBOTS = "User-agent: *\nDisallow: /admin\nSitemap: https://example.com/sitemap.xml\n"
+
+REAL_SITEMAP = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+    "<url><loc>https://example.com/</loc></url></urlset>"
+)
+
+
+def _spa_host_transport():
+    """Catch-all rewrite: every unknown path answers 200 with index.html."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(
+                200, text=SPA_FALLBACK, headers={"content-type": "text/html"}
+            )
+        return httpx.Response(200, text=SAMPLE)
+
+    return httpx.MockTransport(handler)
+
+
+def test_audit_url_rejects_spa_fallback_html_as_robots_and_sitemap():
+    # Vercel/Netlify/CF Pages serve index.html for any unknown path. Trusting
+    # the status code alone told the agent both files exist, hiding a real SEO
+    # gap on exactly the kind of site this tool is built for.
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_spa_host_transport(), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com/"))
+
+    assert result["has_robots_txt"] is False
+    assert result["has_sitemap"] is False
+    assert result["title"] == "Options Test"  # the page itself still audited
+
+
+def test_check_robots_sitemap_unmasks_soft_200_and_reports_status():
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=_spa_host_transport(), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_robots_sitemap("https://example.com"))
+
+    assert result["robots_txt"]["found"] is False
+    assert result["sitemap_xml"]["found"] is False
+    # the status code is surfaced so the agent can see it was a soft 200
+    assert result["robots_txt"]["status_code"] == 200
+    assert result["sitemap_xml"]["status_code"] == 200
+
+
+def test_check_robots_sitemap_accepts_genuine_files():
+    # The sniffing must not swing into false negatives: real files, including
+    # an unusual content type or a sitemap index, still count as present.
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(
+                200, text=REAL_ROBOTS, headers={"content-type": "text/plain"}
+            )
+        return httpx.Response(
+            200, text=REAL_SITEMAP, headers={"content-type": "application/xml"}
+        )
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_robots_sitemap("https://example.com/deep/page"))
+
+    assert result["robots_txt"]["found"] is True
+    assert result["sitemap_xml"]["found"] is True
+
+
+def test_empty_robots_txt_still_counts_as_present():
+    # An empty robots.txt is valid (allow everything) — rejecting it would be
+    # a false "missing robots.txt".
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/robots.txt":
+            return httpx.Response(200, text="")
+        return httpx.Response(404)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_robots_sitemap("https://example.com"))
+
+    assert result["robots_txt"]["found"] is True
+    assert result["sitemap_xml"]["found"] is False
+
+
+def test_check_robots_sitemap_reports_unknown_on_network_error():
+    # A DNS/TLS/timeout failure means "unknown", not "missing" — previously it
+    # was reported as found=False, telling the agent to create files that may
+    # well already exist.
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("dns failure", request=request)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_robots_sitemap("https://nope.invalid"))
+
+    assert result["robots_txt"]["found"] is None
+    assert result["sitemap_xml"]["found"] is None
+    assert "error" in result["robots_txt"]

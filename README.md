@@ -58,7 +58,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   hreflang entry says `de` while `<html lang="en">`, you get a
   `lang_hreflang_mismatch` warning (a region-only difference like `en-US` vs
   `en-GB` is deliberately **not** flagged).
-- 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable.
+- 🤖 **Crawl readiness** (`check_robots_sitemap`): confirms the site is discoverable —
+  and detects **soft 200s**, where an SPA catch-all rewrite serves `index.html`
+  for `/robots.txt` and `/sitemap.xml` so the files only *look* like they exist.
+  Each result carries `found` (`true` / `false` / `null` when the probe failed)
+  plus the raw `status_code`.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
   **absolute URLs** (so an agent can act on them directly), and empty / malformed
   HTML returns a clear `empty_html` error instead of crashing. Charset detection
@@ -74,7 +78,12 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   `<link>` tags the browser actually **fetches** (`stylesheet`, `icon`,
   `preload`, `manifest`, …), so an `http://` `canonical`, `hreflang` alternate,
   `prev`/`next` or `preconnect` hint is never miscounted as an insecure
-  subresource. GlobeLens
+  subresource. The `robots.txt` / `sitemap.xml` probes **never trust a bare
+  `200`**: hosts with a catch-all rewrite (Vercel, Netlify, Cloudflare Pages —
+  most SPA deployments) answer 200 with `index.html` for *every* unknown path,
+  so the body is sniffed to confirm it really is the file; and a probe that
+  fails (DNS/TLS/timeout) reports `null` — "unknown" — instead of claiming the
+  file is missing. GlobeLens
   also decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
   audits stay fast and bounded. When a target is unreachable, `audit_url` and

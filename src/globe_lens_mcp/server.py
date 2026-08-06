@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import httpx
 from dataclasses import asdict
+from typing import Any
 from urllib.parse import urljoin
 
 from fastmcp import FastMCP
@@ -54,6 +55,63 @@ def _decode_response(
     except (LookupError, UnicodeDecodeError):
         text = content.decode("utf-8", errors="replace")
     return text, truncated
+
+
+# How much of a probe response we sniff to decide what it actually is.
+# robots.txt / sitemap.xml reveal themselves in the first few hundred bytes.
+PROBE_SNIFF_BYTES = 2048
+
+_HTML_CONTENT_TYPES = {"text/html", "application/xhtml+xml"}
+_HTML_MARKERS = ("<!doctype html", "<html", "<head", "<body")
+_SITEMAP_ROOTS = ("<urlset", "<sitemapindex")
+
+
+def _content_type(resp: httpx.Response) -> str:
+    """Bare content type of a response, lowercased, without parameters."""
+    return resp.headers.get("content-type", "").split(";")[0].strip().lower()
+
+
+def _body_head(resp: httpx.Response, limit: int = PROBE_SNIFF_BYTES) -> str:
+    """First bytes of a body, decoded leniently — enough to sniff a format."""
+    return resp.content[:limit].decode("utf-8", errors="replace").lstrip("\ufeff \t\r\n")
+
+
+def _is_html_response(resp: httpx.Response) -> bool:
+    """True when a response is an HTML document (by content type or by body).
+
+    Used to unmask *soft* responses: SPA hosts (Vercel, Netlify, Cloudflare
+    Pages, any catch-all rewrite) answer 200 with index.html for every unknown
+    path, so /robots.txt and /sitemap.xml look like they exist when they do
+    not.
+    """
+    if _content_type(resp) in _HTML_CONTENT_TYPES:
+        return True
+    return _body_head(resp)[:512].lower().startswith(_HTML_MARKERS)
+
+
+def _is_robots_txt(resp: httpx.Response) -> bool:
+    """True when a probe response is plausibly a real robots.txt.
+
+    Deliberately lenient in the safe direction: any non-HTML 200 counts, so an
+    *empty* robots.txt (valid, means "allow all") is still reported as present.
+    Only an HTML body — the SPA fallback page — is rejected.
+    """
+    return resp.status_code == 200 and not _is_html_response(resp)
+
+
+def _is_sitemap_xml(resp: httpx.Response) -> bool:
+    """True when a probe response is plausibly a real sitemap.
+
+    Requires an XML sitemap root (`<urlset>` or `<sitemapindex>`) or at least
+    an XML content type. A sitemap always declares one of those roots, so this
+    stays precise while rejecting the HTML fallback page.
+    """
+    if resp.status_code != 200 or _is_html_response(resp):
+        return False
+    head = _body_head(resp).lower()
+    if any(root in head for root in _SITEMAP_ROOTS):
+        return True
+    return _content_type(resp).endswith("xml")
 
 
 def _http_error_result(url: str, status_code: int | None, message: str) -> dict:
@@ -181,14 +239,16 @@ async def audit_url(
         # that serves them via http -> https or apex -> www must not be
         # reported as "missing" just because the caller wanted to see the
         # page's own redirect.
+        # A 200 alone is not proof: catch-all SPA rewrites serve index.html for
+        # both paths, so we also check the response really looks like the file.
         try:
             r = await client.get(robots_url, follow_redirects=True)
-            report.has_robots_txt = r.status_code == 200
+            report.has_robots_txt = _is_robots_txt(r)
         except Exception:
             report.has_robots_txt = None
         try:
             s = await client.get(sitemap_url, follow_redirects=True)
-            report.has_sitemap = s.status_code == 200
+            report.has_sitemap = _is_sitemap_xml(s)
         except Exception:
             report.has_sitemap = None
         out = report.to_dict()
@@ -282,6 +342,15 @@ async def check_robots_sitemap(
 ) -> dict:
     """Check whether a site exposes robots.txt and sitemap.xml.
 
+    A 200 response is not taken as proof on its own: hosts with a catch-all
+    rewrite (Vercel, Netlify, Cloudflare Pages, most SPA deployments) answer
+    200 with index.html for any unknown path, so the body is sniffed to
+    confirm it really is a robots.txt / sitemap rather than the fallback page.
+
+    `found` is True/False when the answer is known, and None when the probe
+    itself failed (DNS, TLS, timeout) — a network error means "unknown", not
+    "missing".
+
     Args:
         url: The site (or any page on it) to check.
         timeout: Request timeout in seconds (default 20).
@@ -299,17 +368,27 @@ async def check_robots_sitemap(
         verify=verify_ssl,
     ) as client:
         robots_url, sitemap_url = robots_sitemap_urls(url)
-        out: dict[str, any] = {}
+        out: dict[str, Any] = {}
         try:
             r = await client.get(robots_url)
-            out["robots_txt"] = {"url": robots_url, "found": r.status_code == 200}
+            out["robots_txt"] = {
+                "url": robots_url,
+                "found": _is_robots_txt(r),
+                "status_code": r.status_code,
+            }
         except Exception as e:  # noqa: BLE001
-            out["robots_txt"] = {"url": robots_url, "found": False, "error": str(e)}
+            # Unreachable != absent: claiming "missing" here would send the
+            # agent off to create a file that may already exist.
+            out["robots_txt"] = {"url": robots_url, "found": None, "error": str(e)}
         try:
             s = await client.get(sitemap_url)
-            out["sitemap_xml"] = {"url": sitemap_url, "found": s.status_code == 200}
+            out["sitemap_xml"] = {
+                "url": sitemap_url,
+                "found": _is_sitemap_xml(s),
+                "status_code": s.status_code,
+            }
         except Exception as e:  # noqa: BLE001
-            out["sitemap_xml"] = {"url": sitemap_url, "found": False, "error": str(e)}
+            out["sitemap_xml"] = {"url": sitemap_url, "found": None, "error": str(e)}
         return out
 
 
