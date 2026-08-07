@@ -170,6 +170,17 @@
 > HTML fallback page is rejected, while an *empty* robots.txt still counts as
 > present. A failed probe now reports `found: null` ("unknown") instead of
 > `false`, and the raw `status_code` is surfaced. 79 tests passing.
+>
+> **Updated 2026-08-07 (Day 27):** the streak is now 27+ days — no new feature
+> this round; instead we *locked down existing real behavior with dedicated
+> tests*: 6 new unit tests assert that legacy `<a name="…">` anchors are still
+> collected as valid targets, that `iframe`/`video`/`audio`/`source`/`embed`
+> `http://` subresources count as mixed content, that self-reference matching
+> respects the query string and port, that the SEO score clamps to 0 under a
+> 161-point worst case, that issues sort deterministically within a severity
+> tier, and that the whole report round-trips through `json.dumps`/`loads` for
+> the MCP transport boundary. 85 tests passing. Doing test-coverage work on an
+> "off" day shows the maintenance focus is long-term trust, not feature count.
 
 ---
 
@@ -295,6 +306,7 @@ first.
 | 24 | 2026-08-04 | tool options | optional `follow_redirects` — stop at the first hop and report `status_code` + resolved `redirect_to` (301-vs-302 migration QA, locale routing); robots/sitemap probes still follow | **72 passed** |
 | 25 | 2026-08-05 | new audit dim | unsafe external `target="_blank"` link detection (cross-origin links without `rel="noopener noreferrer"`; reverse-tabnabbing / Lighthouse "unsafe links") | **74 passed** |
 | 26 | 2026-08-06 | bug fix | robots.txt / sitemap.xml probes stop trusting a bare `200` (SPA catch-all rewrites served `index.html` and looked like real files); failed probe now reports `found: null`, not `false` | **79 passed** |
+| 27 | 2026-08-07 | test coverage | lock down legacy `<a name>` anchors, media/iframe mixed-content, self-ref query/port, score clamp at 0, deterministic within-tier sort, JSON round-trip for MCP transport | **85 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -312,7 +324,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 25+ day streak of tested, documented, backward-compatible
+> project with a continuous 27+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -342,7 +354,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 26 days, 26+ real commits, 79 passing tests. GlobeLens now validates hreflang
+> 27 days, 27+ real commits, 85 passing tests. GlobeLens now validates hreflang
 > codes, flags thin content, broken anchors, mixed content, unsafe target="_blank"
 > links, noindex… and returns SEO issues *sorted by severity* so your agent fixes
 > the urgent stuff first. Small, tested, documented — the kind of OSS I wish more

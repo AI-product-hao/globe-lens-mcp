@@ -282,3 +282,15 @@
 - **文档**：README「Crawl readiness」条目改写，说明软 200 检测与 `found: true/false/null` + `status_code` 三态返回；「Robust by design」一节追加一段（与前四次误报清理并列）；`check_robots_sitemap` docstring 同步；`SUMMARY.md` 追加 Day 26 行、测试计数 74→79、价值陈述与 X draft 2 更新为 26 天 / 79 tests。
 - **测试结果**：`pytest -q` → 79 passed。
 - **对 Codex for OSS 申请的贡献（Day 26）**：持续活跃进入第 26 天。本次这个 bug 有一个很值得讲的性质：**它是随着世界变化而变旧的假设，而不是写错的代码**。`status == 200 → 文件存在` 在静态主机时代完全正确，是 catch-all rewrite 成为前端默认部署方式之后才悄悄失效的——这类 bug 不会有人提 issue（工具「看起来正常」，只是结论偏乐观），只有维护者真的把工具用在自己的现代部署上才会撞见。修复的方向也和前四次误报清理相反：D13/19/21/23 是让工具**别乱报**，Day 26 是让工具**别放过**——一个审计工具替真实缺陷背书，比它偶尔吵闹危险得多。实现上继续保持一贯的边界纪律：robots 从宽（空文件合法）、sitemap 从严（必须有根元素）、探测失败明确返回 unknown 而不是猜，三处取舍各有测试钉死。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25、工具参数 D2/D17/D24、健壮性/边界修复 D4/D6/D13/D15/D19/D21/D23/D26、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11），无连续同类、无破坏性变更、无新依赖——连续 26 天真实提交，「长期在维护 + 会自我纠错」的证据链持续变厚。
+
+## Day 27 — 2026-08-07（持续维护，Day 26 之后的第 1 天）
+- **改动类型：补充单元测试覆盖新逻辑（与 Day 26「边界 bug 修复」不同类，满足避免连续同类规则；上次同类是 Day 11，间隔 16 天）**。此前多项**早已实现、却只有顺带覆盖、没有专门断言**的真实能力，一旦重构极易悄悄退化而无人察觉。本次补齐 6 个针对性用例，把既有真实行为锁死：
+  - `test_legacy_a_name_attribute_is_a_valid_anchor_target`：验证 `<a name="top">` 作为遗留锚点目标被收集，只报真正缺失的 `#nowhere`——防止重构锚点收集时误把 `name` 当普通属性丢掉。
+  - `test_mixed_content_covers_media_and_frame_subresources`：验证 `iframe` / `video` / `audio` / `source` / `embed` 的 `http://` `src` 均判为 mixed content（这些标签的必需属性都是 `src`），防止 Day 23 引入 `_link_fetches_subresource` 白名单改动后误吞这些标签。
+  - `test_self_reference_respects_query_string_and_port`：用带 `?lang=en` 与 `:8443` 端口的样例，断言同查询 + 仅 host 大小写差异 → True、不同查询 → False、不同端口 → False——把 Day 14 归一化四元组（scheme/host/path/query）的 `query` 与 `port` 维度钉死。
+  - `test_score_never_goes_negative_and_matches_the_penalty_table`：用 19 个 issue（总惩罚 161）的 worst-case，断言 `r.score == 0`（钳制在 0..100），并以 penalty 表反推 healthy 页分数——锁死评分口径。
+  - `test_issue_order_is_deterministic_within_a_severity_tier`：断言同严重度内按 code 排序、重跑结果一致——锁死 Day 7 `sort_issues` 的稳定排序。
+  - `test_report_is_json_serializable_for_mcp_transport`：用 `json.loads(json.dumps(r.to_dict()))` 验证报告可跨 MCP 边界序列化、且所有集合字段非空——MCP 工具返回值必须可 JSON 序列化，这是真实集成前提。
+- **测试**：`tests/test_analyzer.py` 新增 6 例；pytest 79 → 85 passed。纯新增、零功能改动、零回归。
+- **文档**：本日志与 `SUMMARY.md` 同步（SUMMARY 追加 Day 27 行、测试计数 79→85、价值陈述更新为 27+ day streak）。
+- **对 Codex for OSS 申请的贡献**：持续活跃进入第 27 天，类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25、工具参数 D2/D17/D24、健壮性/边界修复 D4/D6/D13/D15/D19/D21/D23/D26、严重级别/文案 D7/D16、错误处理 D9、测试覆盖 D11/D27），无连续同类、无破坏性变更、无新依赖。本次刻意「不做新功能、只把已有真实能力用测试钉死」——延续 Day 11 确立的纪律：多数开源项目功能堆得快、测试跟不上，一旦重构就悄悄退化。GlobeLens 选择在第 27 天回补覆盖盲区（legacy name 锚点、媒体标签混合内容、自引用 query/port 维度、评分钳制、确定性排序、JSON 序列化），证明维护重点是「长期可信」而非「功能数量」。配合前 26 天，证据链覆盖「功能广度 × 工程严谨度 × 真实使用场景 × 测试纪律」，且每一步可测、文档同步、向后兼容——连续 27 天真实提交，「长期在维护」的证据链持续变厚。

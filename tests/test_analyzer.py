@@ -912,3 +912,143 @@ def test_only_unprotected_cross_origin_blank_links_flagged():
     # carrying rel="noopener"/"noreferrer" (incl. protocol-relative) are not.
     assert len(r.unsafe_blank_links) == 1
     assert r.unsafe_blank_links[0]["href"] == "https://other.com/x"
+
+
+# ---------------------------------------------------------------------------
+# Coverage hardening: behaviours that already work but were never asserted
+# directly. Each of these is a path a refactor could silently break without a
+# single test turning red, so they are locked down here.
+# ---------------------------------------------------------------------------
+
+
+def test_legacy_a_name_attribute_is_a_valid_anchor_target():
+    # Before HTML5, in-page jump targets were declared with <a name="...">
+    # rather than an id, and browsers still honour that form. The analyzer
+    # collects `name` attributes alongside ids; without this test the legacy
+    # branch could be dropped and every anchor on an older site would suddenly
+    # be reported as broken.
+    r = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>Legacy Named Anchor Demo Page</title></head>"
+        "<body><h1>Hi</h1>"
+        '<a name="top"></a>'
+        '<a href="#top">Back to top</a>'
+        '<a href="#nowhere">Dead link</a>'
+        "</body></html>",
+        "https://example.com",
+    )
+    # the legacy target resolves, only the genuinely missing one is reported
+    assert [e["href"] for e in r.broken_anchors] == ["#nowhere"]
+
+
+def test_mixed_content_covers_media_and_frame_subresources():
+    # The <link> rel allow-list added for metadata links must not shadow the
+    # other scanned tags: media and frame elements load their `src` directly,
+    # so an http:// URL on any of them is real mixed content on an HTTPS page.
+    r = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>Media Subresource Mixed Content</title></head>"
+        "<body><h1>Hi</h1>"
+        '<iframe src="http://cdn.example.com/frame.html"></iframe>'
+        '<video src="http://cdn.example.com/clip.mp4"></video>'
+        '<audio src="http://cdn.example.com/track.mp3"></audio>'
+        '<video><source src="http://cdn.example.com/clip.webm"></video>'
+        '<embed src="http://cdn.example.com/widget.swf">'
+        "</body></html>",
+        "https://example.com",
+    )
+    assert "mixed_content" in [i.code for i in r.issues]
+    assert {m["tag"] for m in r.mixed_content} == {
+        "iframe", "video", "audio", "source", "embed",
+    }
+    # all of them are reported on `src`, never on `href`
+    assert all(m["attr"] == "src" for m in r.mixed_content)
+
+
+SAMPLE_QUERY_SELF_REF = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Query String Self Reference Demo</title>
+<link rel="alternate" hreflang="en" href="https://EXAMPLE.com:8443/p?lang=en">
+<link rel="alternate" hreflang="de" href="https://example.com:8443/p?lang=de">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_self_reference_respects_query_string_and_port():
+    # Query-string locale routing (?lang=xx) is a common i18n pattern, and the
+    # port is part of the origin. Normalization must ignore host casing but
+    # must NOT ignore either of these, otherwise the self-reference check would
+    # match the wrong page and go silently useless on such sites.
+    same = analyze_html(SAMPLE_QUERY_SELF_REF, "https://example.com:8443/p?lang=en")
+    assert same.hreflang_self_ref is True  # host case-insensitive, query kept
+
+    other_locale = analyze_html(
+        SAMPLE_QUERY_SELF_REF, "https://example.com:8443/p?lang=fr"
+    )
+    assert other_locale.hreflang_self_ref is False  # different query = other page
+
+    other_port = analyze_html(SAMPLE_QUERY_SELF_REF, "https://example.com/p?lang=en")
+    assert other_port.hreflang_self_ref is False  # different port = other origin
+
+
+# A deliberately terrible page that triggers 19 issues across all three
+# severity tiers at once (161 penalty points against a 100-point scale).
+SAMPLE_WORST_CASE = """<html><head>
+<meta name="robots" content="noindex">
+<meta http-equiv="refresh" content="0; url=/en/">
+<link rel="canonical" href="https://example.com/a">
+<link rel="canonical" href="https://example.com/b">
+<link rel="alternate" hreflang="en_US" href="https://example.com/x">
+</head><body>
+<img src="http://cdn.example.com/i.png">
+<a href="#nope">dead anchor</a>
+<a href="https://other.com" target="_blank">external</a>
+</body></html>"""
+
+
+def test_score_never_goes_negative_and_matches_the_penalty_table():
+    # The score is the headline number an agent acts on, yet the penalty
+    # arithmetic had no direct test. Lock both the weights and the 0..100 clamp.
+    penalty = {"error": 20, "warning": 8, "info": 3}
+    r = analyze_html(SAMPLE_WORST_CASE, "https://example.com/p")
+    total = sum(penalty[i.severity] for i in r.issues)
+    assert total > 100  # this page really does overflow the scale
+    assert r.score == max(0, 100 - total) == 0  # clamped, never negative
+
+    # and on a healthy page the same formula holds without clamping
+    good = analyze_html(SAMPLE_GOOD, "https://example.com")
+    good_total = sum(penalty[i.severity] for i in good.issues)
+    assert good.score == 100 - good_total
+    assert 0 <= good.score <= 100
+
+
+def test_issue_order_is_deterministic_within_a_severity_tier():
+    # sort_issues breaks ties on `code`, which is what makes two runs over the
+    # same page produce byte-identical output (diff-able reports, stable
+    # snapshots). Without this, dict/parse ordering would leak into results.
+    r = analyze_html(SAMPLE_WORST_CASE, "https://example.com/p")
+    for severity in ("error", "warning", "info"):
+        codes = [i.code for i in r.issues if i.severity == severity]
+        assert codes == sorted(codes), f"{severity} issues are not tie-broken by code"
+    # re-analyzing the same input yields exactly the same ordering
+    again = analyze_html(SAMPLE_WORST_CASE, "https://example.com/p")
+    assert [i.code for i in again.issues] == [i.code for i in r.issues]
+
+
+def test_report_is_json_serializable_for_mcp_transport():
+    # Every report crosses an MCP boundary as JSON. A field holding a set, a
+    # BeautifulSoup Tag or any other non-JSON value would only blow up at
+    # runtime in the user's editor, never in a unit test — unless we check it
+    # here, on a page that populates every list/dict field at once.
+    import json
+
+    r = analyze_html(SAMPLE_WORST_CASE, "https://example.com/p")
+    payload = json.loads(json.dumps(r.to_dict()))
+    # nested Issue dataclasses survive the round-trip with all their fields
+    assert payload["issues"] and all(
+        {"severity", "code", "message", "priority", "fix"} <= set(i)
+        for i in payload["issues"]
+    )
+    # the collection fields really were exercised (not silently empty)
+    for key in ("canonical_urls", "hreflang", "mixed_content",
+                "broken_anchors", "unsafe_blank_links", "invalid_hreflang"):
+        assert payload[key], f"{key} was empty; the round-trip did not cover it"
