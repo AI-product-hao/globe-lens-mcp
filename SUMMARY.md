@@ -181,6 +181,18 @@
 > tier, and that the whole report round-trips through `json.dumps`/`loads` for
 > the MCP transport boundary. 85 tests passing. Doing test-coverage work on an
 > "off" day shows the maintenance focus is long-term trust, not feature count.
+>
+> **Updated 2026-08-08 (Day 28):** the streak is now 28+ days — two false
+> negatives fixed, both of the worst kind for an audit tool: it *vouched for*
+> pages that are genuinely broken. (1) An inline `<svg><title>Close menu</title>`
+> icon label was being reported as the page title, so an SPA shell served
+> without a real `<title>` got a cosmetic "title is short" warning instead of
+> the critical `title_missing` error; the title is now read from the HTML
+> `<title>` only, skipping SVG/MathML subtrees. (2) Every element's `name`
+> attribute was registered as an anchor jump target, so `<meta
+> name="description">` alone made a dead `href="#description"` pass the
+> broken-anchor check on virtually any page; per the HTML spec only
+> `<a name="…">` is a legacy target now. 89 tests passing.
 
 ---
 
@@ -307,6 +319,7 @@ first.
 | 25 | 2026-08-05 | new audit dim | unsafe external `target="_blank"` link detection (cross-origin links without `rel="noopener noreferrer"`; reverse-tabnabbing / Lighthouse "unsafe links") | **74 passed** |
 | 26 | 2026-08-06 | bug fix | robots.txt / sitemap.xml probes stop trusting a bare `200` (SPA catch-all rewrites served `index.html` and looked like real files); failed probe now reports `found: null`, not `false` | **79 passed** |
 | 27 | 2026-08-07 | test coverage | lock down legacy `<a name>` anchors, media/iframe mixed-content, self-ref query/port, score clamp at 0, deterministic within-tier sort, JSON round-trip for MCP transport | **85 passed** |
+| 28 | 2026-08-08 | bug fix | two false negatives removed: inline `<svg><title>` icon labels no longer masquerade as the page title (SPA shells get their real `title_missing` error back), and only `<a name="…">` counts as a legacy anchor target (a `<meta name="description">` no longer validates a dead `href="#description"`) | **89 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -324,7 +337,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 27+ day streak of tested, documented, backward-compatible
+> project with a continuous 28+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -354,7 +367,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 27 days, 27+ real commits, 85 passing tests. GlobeLens now validates hreflang
+> 28 days, 28+ real commits, 89 passing tests. GlobeLens now validates hreflang
 > codes, flags thin content, broken anchors, mixed content, unsafe target="_blank"
 > links, noindex… and returns SEO issues *sorted by severity* so your agent fixes
 > the urgent stuff first. Small, tested, documented — the kind of OSS I wish more
