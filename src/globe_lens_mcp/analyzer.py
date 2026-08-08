@@ -306,6 +306,31 @@ def _link_fetches_subresource(tag) -> bool:
     return bool(set(_rel_values(tag)) & FETCHING_LINK_RELS)
 
 
+# Foreign-namespace elements whose <title> children are *not* the document
+# title: SVG <title> is an accessible name for the graphic, MathML <title>
+# likewise. Browsers and search engines only ever use the HTML <title>.
+_FOREIGN_TITLE_PARENTS = frozenset({"svg", "math"})
+
+
+def _page_title_tag(soup):
+    """Return the document's real <title>, ignoring inline SVG/MathML titles.
+
+    Inline icons carry their own accessible name (``<svg><title>Close
+    menu</title></svg>``) and modern pages are full of them. Those elements
+    live in the SVG namespace, so browsers and crawlers never treat them as
+    the page title — but a namespace-unaware HTML parser happily returns the
+    first ``<title>`` found anywhere in the tree. On a page whose real
+    ``<title>`` is missing (very common in SPAs that set it from JavaScript)
+    that meant reporting the menu icon's label as the page title and *hiding*
+    a critical SEO defect behind a harmless "title is short" warning.
+    """
+    for tag in soup.find_all("title"):
+        if any(parent.name in _FOREIGN_TITLE_PARENTS for parent in tag.parents):
+            continue
+        return tag
+    return None
+
+
 def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     """Parse raw HTML and produce an SEO / i18n audit report.
 
@@ -332,7 +357,9 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     soup = BeautifulSoup(html, "html.parser")
 
     # --- <title> ---
-    title_tag = soup.title
+    # Deliberately not `soup.title`: that would return an inline SVG icon's
+    # <title> when the page has no real one (see _page_title_tag).
+    title_tag = _page_title_tag(soup)
     if title_tag and title_tag.string and title_tag.string.strip():
         report.title = title_tag.string.strip()
         report.title_length = len(report.title)
@@ -638,7 +665,15 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     anchor_targets: set[str] = set()
     for el in soup.find_all(attrs={"id": True}):
         anchor_targets.add(str(el.get("id")))
-    for el in soup.find_all(attrs={"name": True}):
+    # Only `<a name="...">` is a legacy fragment target ("find a potential
+    # indicated element" in the HTML spec: an id match, or an *a* element with
+    # a matching name). The `name` attribute means something entirely
+    # different on other elements — form control names (`<input name="q">`),
+    # metadata keys (`<meta name="description">`), browsing-context names
+    # (`<iframe name="preview">`) — and none of them can be jumped to.
+    # Accepting them made GlobeLens silently approve genuinely broken links
+    # such as href="#description" on any page with a meta description.
+    for el in soup.find_all("a", attrs={"name": True}):
         n = el.get("name")
         if isinstance(n, str):
             anchor_targets.add(n)

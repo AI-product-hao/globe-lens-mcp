@@ -83,7 +83,13 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   most SPA deployments) answer 200 with `index.html` for *every* unknown path,
   so the body is sniffed to confirm it really is the file; and a probe that
   fails (DNS/TLS/timeout) reports `null` — "unknown" — instead of claiming the
-  file is missing. GlobeLens
+  file is missing. The page title is read from the **HTML `<title>` only**: an
+  inline `<svg><title>Close menu</title></svg>` icon label is never mistaken
+  for the document title, so an SPA shell served without a real `<title>` still
+  gets the `title_missing` error it deserves instead of a fictional one.
+  Likewise only `<a name="…">` counts as a legacy anchor target — a `name` on a
+  `<meta>`, form control or `<iframe>` no longer makes a dead
+  `href="#description"` look valid. GlobeLens
   also decodes **any charset safely** (mis-encoded pages never crash the agent) and
   **truncates oversized pages**, flagging them via a `page_truncated` info issue so
   audits stay fast and bounded. When a target is unreachable, `audit_url` and

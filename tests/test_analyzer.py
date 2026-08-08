@@ -1052,3 +1052,72 @@ def test_report_is_json_serializable_for_mcp_transport():
     for key in ("canonical_urls", "hreflang", "mixed_content",
                 "broken_anchors", "unsafe_blank_links", "invalid_hreflang"):
         assert payload[key], f"{key} was empty; the round-trip did not cover it"
+
+
+def test_inline_svg_title_is_not_mistaken_for_the_page_title():
+    # Icon sprites carry their own accessible name. On an SPA shell whose real
+    # <title> is set from JavaScript (so it is absent in the served HTML), a
+    # namespace-unaware parser returns the icon's label and the audit reports
+    # a perfectly fine — but entirely fictional — page title, downgrading a
+    # critical `title_missing` error into a harmless "title is short" warning.
+    html = """<html lang="en"><head><meta charset="utf-8"></head>
+    <body>
+      <button><svg viewBox="0 0 24 24"><title>Close menu</title><path d="M0 0"/></svg></button>
+      <h1>Dashboard</h1>
+    </body></html>"""
+    r = analyze_html(html, "https://example.com/app")
+    assert r.title is None
+    assert r.title_length == 0
+    codes = [i.code for i in r.issues]
+    assert "title_missing" in codes
+    assert "title_short" not in codes
+
+
+def test_real_head_title_still_wins_over_svg_titles():
+    # The fix must not throw away legitimate titles: a page with both a real
+    # <title> and inline SVG titles keeps the real one, including when the
+    # SVG appears earlier in the body.
+    html = """<html lang="en"><head>
+      <title>Pricing — Example Global Site for Teams</title></head>
+    <body><svg><title>Menu</title></svg><svg><title>Search</title></svg></body></html>"""
+    r = analyze_html(html, "https://example.com/pricing")
+    assert r.title == "Pricing — Example Global Site for Teams"
+    assert [i.code for i in r.issues if i.code.startswith("title")] == []
+
+
+def test_non_anchor_name_attributes_are_not_valid_jump_targets():
+    # Only `<a name="...">` is a legacy fragment target. `name` on a meta tag,
+    # a form control or an iframe means something completely different and
+    # cannot be jumped to — treating them as targets made GlobeLens approve
+    # links that do nothing when clicked (a false negative that hides the bug
+    # instead of reporting it).
+    html = """<html lang="en"><head>
+      <title>Contact us at Example Global Site today</title>
+      <meta name="description" content="Reach the team."></head>
+    <body>
+      <a href="#description">About</a>
+      <input name="search">
+      <a href="#search">Search</a>
+      <iframe name="preview"></iframe>
+      <a href="#preview">Preview</a>
+    </body></html>"""
+    r = analyze_html(html, "https://example.com/contact")
+    hrefs = [a["href"] for a in r.broken_anchors]
+    assert hrefs == ["#description", "#search", "#preview"]
+    assert "broken_anchors" in [i.code for i in r.issues]
+
+
+def test_anchor_name_and_ids_remain_valid_targets():
+    # Regression guard for the narrowing above: the two forms that *are* real
+    # targets (an element id, and the legacy `<a name>`) must keep working,
+    # including when a same-named form control sits on the same page.
+    html = """<html lang="en"><head>
+      <title>Docs index for the Example Global Site</title></head>
+    <body>
+      <a name="top"></a><h2 id="install">Install</h2>
+      <input name="install">
+      <a href="#top">Top</a><a href="#install">Install</a>
+    </body></html>"""
+    r = analyze_html(html, "https://example.com/docs")
+    assert r.broken_anchors == []
+    assert "broken_anchors" not in [i.code for i in r.issues]
