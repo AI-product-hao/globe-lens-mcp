@@ -193,6 +193,16 @@
 > name="description">` alone made a dead `href="#description"` pass the
 > broken-anchor check on virtually any page; per the HTML spec only
 > `<a name="…">` is a legacy target now. 89 tests passing.
+>
+> **Updated 2026-08-09 (Day 29):** the streak is now 29+ days. `check_i18n`
+> gained **hreflang cluster-integrity** detection — beyond per-value checks
+> (invalid codes, missing x-default, missing self-reference), it now flags the
+> two structural contradictions that make Google silently discard the whole
+> alternate set: one `hreflang` code declared against several URLs
+> (`hreflang_conflict`) and several codes pointing at the same URL
+> (`hreflang_duplicate_url`). x-default sharing a URL and trailing-slash/port
+> differences are normalized, so only *real* contradictions are reported. 93
+> tests passing.
 
 ---
 
@@ -320,6 +330,7 @@ first.
 | 26 | 2026-08-06 | bug fix | robots.txt / sitemap.xml probes stop trusting a bare `200` (SPA catch-all rewrites served `index.html` and looked like real files); failed probe now reports `found: null`, not `false` | **79 passed** |
 | 27 | 2026-08-07 | test coverage | lock down legacy `<a name>` anchors, media/iframe mixed-content, self-ref query/port, score clamp at 0, deterministic within-tier sort, JSON round-trip for MCP transport | **85 passed** |
 | 28 | 2026-08-08 | bug fix | two false negatives removed: inline `<svg><title>` icon labels no longer masquerade as the page title (SPA shells get their real `title_missing` error back), and only `<a name="…">` counts as a legacy anchor target (a `<meta name="description">` no longer validates a dead `href="#description"`) | **89 passed** |
+| 29 | 2026-08-09 | new audit dim | hreflang cluster-integrity: flags one `hreflang` code declared against several URLs (`hreflang_conflict`) and several codes pointing at the same URL (`hreflang_duplicate_url`) — both make Google silently discard the alternates; x-default sharing a URL and trailing-slash/port differences are normalized so only real contradictions are reported | **93 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -367,11 +378,12 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 28 days, 28+ real commits, 89 passing tests. GlobeLens now validates hreflang
-> codes, flags thin content, broken anchors, mixed content, unsafe target="_blank"
-> links, noindex… and returns SEO issues *sorted by severity* so your agent fixes
-> the urgent stuff first. Small, tested, documented — the kind of OSS I wish more
-> tools were.
+> 29 days, 29+ real commits, 93 passing tests. GlobeLens now validates hreflang
+> codes (and the whole alternate set: conflicting codes, duplicate targets,
+> missing self-reference) flags thin content, broken anchors, mixed content,
+> unsafe target="_blank" links, noindex… and returns SEO issues *sorted by
+> severity* so your agent fixes the urgent stuff first. Small, tested,
+> documented — the kind of OSS I wish more tools were.
 > github.com/AI-product-hao/globe-lens-mcp
 
 ### Reddit — r/selfhosted or r/dotnet / r/SideProject
