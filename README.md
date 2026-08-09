@@ -49,7 +49,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   cluster to list *itself* as an alternate, otherwise the whole set may be
   ignored — GlobeLens compares resolved, normalized URLs (trailing slash and
   host case insensitive) and reports `hreflang_self_ref` plus a
-  `hreflang_no_self_ref` warning when the self-link is missing.
+  `hreflang_no_self_ref` warning when the self-link is missing. It also catches
+  **cluster-integrity breakage**: one `hreflang` value declared against several
+  URLs (`hreflang_conflict`) and several values pointing at the *same* URL
+  (`hreflang_duplicate_url`) — both make Google silently discard the
+  contradictory pairs, so the alternates they were meant to declare vanish.
 - 🗣️ **Language tag correctness**: `<html lang>` is validated as a real BCP 47
   tag (`lang_valid`), so `english`, `en_US` or `en-USA` are flagged
   (`lang_invalid`) instead of silently ignored by browsers and screen readers;

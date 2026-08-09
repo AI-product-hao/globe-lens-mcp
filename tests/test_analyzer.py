@@ -1121,3 +1121,72 @@ def test_anchor_name_and_ids_remain_valid_targets():
     r = analyze_html(html, "https://example.com/docs")
     assert r.broken_anchors == []
     assert "broken_anchors" not in [i.code for i in r.issues]
+
+
+# --- hreflang cluster integrity (conflicting declarations) ---
+# The alternate set is a map. Two real-world ways it breaks:
+#   1. one language code declared with different targets (copy-pasted <link>
+#      block that kept the previous locale's code);
+#   2. several language codes claiming the same URL (a missing translation
+#      "temporarily" pointed at the English page).
+# Google discards contradictory hreflang pairs, so both bugs silently disable
+# the alternates they were meant to declare.
+
+def test_flags_one_hreflang_code_pointing_at_several_urls():
+    html = """<html lang="de"><head><meta charset="utf-8">
+      <title>Konflikt Demo Seite mit langem Titel</title>
+      <link rel="alternate" hreflang="de" href="https://example.com/de">
+      <link rel="alternate" hreflang="de" href="https://example.com/de-at">
+      <link rel="alternate" hreflang="en" href="https://example.com/en">
+      <link rel="alternate" hreflang="x-default" href="https://example.com/">
+    </head><body><h1>Hallo</h1></body></html>"""
+    r = analyze_html(html, "https://example.com/de")
+    assert "hreflang_conflict" in [i.code for i in r.issues]
+    assert r.hreflang_conflicts == [
+        {
+            "hreflang": "de",
+            "urls": ["https://example.com/de", "https://example.com/de-at"],
+        }
+    ]
+    # Only the offending code is reported; "en" points at a single URL.
+    assert r.hreflang_duplicate_urls == []
+
+
+def test_flags_several_languages_claiming_the_same_url():
+    # "fr" has no translation yet and was pointed at the English page.
+    html = """<html lang="en"><head><meta charset="utf-8">
+      <title>Duplicate Target Demo Page Title Here</title>
+      <link rel="alternate" hreflang="en" href="https://example.com/en">
+      <link rel="alternate" hreflang="fr" href="https://example.com/en/">
+      <link rel="alternate" hreflang="x-default" href="https://example.com/en">
+    </head><body><h1>Hi</h1></body></html>"""
+    r = analyze_html(html, "https://example.com/en")
+    assert "hreflang_duplicate_url" in [i.code for i in r.issues]
+    assert r.hreflang_duplicate_urls == [
+        {"url": "https://example.com/en", "hreflang": ["en", "fr"]}
+    ]
+    # x-default sharing the English URL is correct and must not be counted,
+    # and a trailing-slash difference is the same page, not a conflict.
+    assert r.hreflang_conflicts == []
+
+
+def test_clean_hreflang_cluster_reports_no_conflict():
+    # Same code repeated with an equivalent URL ("/de" vs "/de/") is a harmless
+    # duplicate declaration, not a contradiction; SAMPLE_GOOD must stay clean.
+    html = """<html lang="de"><head><meta charset="utf-8">
+      <title>Saubere Sprachversionen Demo Seite</title>
+      <link rel="alternate" hreflang="de" href="https://example.com/de">
+      <link rel="alternate" hreflang="de" href="https://example.com/de/">
+      <link rel="alternate" hreflang="EN" href="/en">
+      <link rel="alternate" hreflang="x-default" href="/en">
+    </head><body><h1>Hallo</h1></body></html>"""
+    r = analyze_html(html, "https://example.com/de")
+    codes = [i.code for i in r.issues]
+    assert "hreflang_conflict" not in codes
+    assert "hreflang_duplicate_url" not in codes
+    assert r.hreflang_conflicts == []
+    assert r.hreflang_duplicate_urls == []
+
+    good = analyze_html(SAMPLE_GOOD, "https://example.com")
+    assert good.hreflang_conflicts == []
+    assert good.hreflang_duplicate_urls == []

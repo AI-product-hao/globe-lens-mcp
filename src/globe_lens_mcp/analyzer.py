@@ -105,6 +105,8 @@ FIX_HINTS: dict[str, str] = {
     "hreflang_no_default": 'Add <link rel="alternate" hreflang="x-default" href="..."> pointing to the fallback version.',
     "hreflang_invalid": "Replace each invalid value with an ISO 639-1 language code, optionally plus a region (e.g. 'en', 'en-US'), or 'x-default'.",
     "hreflang_no_self_ref": "Add an hreflang link whose href is this page's own URL to the alternate set.",
+    "hreflang_conflict": "Declare each hreflang value exactly once: delete the duplicate <link rel=\"alternate\"> tags, or fix the language code on whichever one points at the wrong URL.",
+    "hreflang_duplicate_url": "Give each language its own URL, or drop the extra hreflang values so one URL is not claimed by several languages (only x-default may share a URL).",
     "og_missing": 'Add <meta property="og:title" ...> and <meta property="og:description" ...> for social sharing previews.',
     "robots_noindex": "Remove 'noindex' from the meta robots tag if this page should appear in search results.",
     "json_ld_missing": 'Add a <script type="application/ld+json"> block with schema.org markup matching the page type.',
@@ -260,6 +262,12 @@ class AuditReport:
     # None = page has no hreflang links (check not applicable);
     # True/False = whether the hreflang set references the page itself.
     hreflang_self_ref: bool | None = None
+    # Language codes declared more than once with *different* targets, e.g.
+    # [{"hreflang": "de", "urls": ["https://x.com/de", "https://x.com/de-at"]}].
+    hreflang_conflicts: list[dict[str, Any]] = field(default_factory=list)
+    # URLs claimed by more than one language code (x-default excluded), e.g.
+    # [{"url": "https://x.com/en", "hreflang": ["en", "fr"]}].
+    hreflang_duplicate_urls: list[dict[str, Any]] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
     twitter_tags: dict[str, str] = field(default_factory=dict)
     has_robots_txt: bool | None = None
@@ -503,6 +511,65 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 f"Invalid hreflang value(s): {', '.join(report.invalid_hreflang)}; "
                 f"use an ISO language code optionally with a region "
                 f"(e.g. 'en' or 'en-US') or 'x-default'."))
+        # hreflang cluster integrity: the alternate set is a map, and both
+        # halves of it break in the wild.
+        #   1. One code -> several URLs. A <link> block copied between locales
+        #      keeps the previous language code, so e.g. "de" points at both
+        #      /de and /de-at. Google treats the pair as contradictory and
+        #      drops it, silently disabling the alternate.
+        #   2. Several codes -> one URL. A missing translation gets
+        #      "temporarily" pointed at the English page, so "fr" and "en"
+        #      claim the same document; the wrong locale then wins in search
+        #      results for one of them. x-default is exempt: it is *meant* to
+        #      share a URL with the fallback language.
+        # Comparison uses the same normalization as the self-reference check,
+        # so "/en" vs "/en/" is a duplicate declaration, not a conflict.
+        by_code: dict[str, list[str]] = {}
+        by_url: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+        for h in report.hreflang:
+            code = (h.get("hreflang") or "").strip().lower()
+            target = h.get("abs_href") or h.get("href") or ""
+            if not code or not target:
+                continue
+            url_key = _self_ref_key(target)
+            targets = by_code.setdefault(code, [])
+            if all(_self_ref_key(t) != url_key for t in targets):
+                targets.append(target)
+            if code != "x-default":
+                slot = by_url.setdefault(url_key, {"url": target, "hreflang": []})
+                if code not in slot["hreflang"]:
+                    slot["hreflang"].append(code)
+
+        report.hreflang_conflicts = [
+            {"hreflang": code, "urls": targets}
+            for code, targets in by_code.items()
+            if len(targets) > 1
+        ]
+        if report.hreflang_conflicts:
+            detail = "; ".join(
+                f"{c['hreflang']} -> {', '.join(c['urls'])}"
+                for c in report.hreflang_conflicts
+            )
+            report.issues.append(Issue(
+                "warning", "hreflang_conflict",
+                f"Conflicting hreflang declarations ({detail}); a language code "
+                f"must resolve to a single URL or search engines discard the "
+                f"contradictory alternates."))
+
+        report.hreflang_duplicate_urls = [
+            slot for slot in by_url.values() if len(slot["hreflang"]) > 1
+        ]
+        if report.hreflang_duplicate_urls:
+            detail = "; ".join(
+                f"{', '.join(s['hreflang'])} -> {s['url']}"
+                for s in report.hreflang_duplicate_urls
+            )
+            report.issues.append(Issue(
+                "warning", "hreflang_duplicate_url",
+                f"One URL is claimed by several languages ({detail}); each "
+                f"language version needs its own URL (only x-default may "
+                f"share one)."))
+
         # Self-referencing hreflang: Google requires every page in an hreflang
         # cluster to also list *itself* as one of the alternates. When the
         # self-reference is missing, search engines may ignore the whole set —

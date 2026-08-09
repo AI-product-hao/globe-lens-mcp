@@ -623,3 +623,37 @@ def test_check_robots_sitemap_reports_unknown_on_network_error():
     assert result["robots_txt"]["found"] is None
     assert result["sitemap_xml"]["found"] is None
     assert "error" in result["robots_txt"]
+
+
+def test_check_i18n_exposes_hreflang_cluster_conflicts():
+    # The i18n tool must surface the cluster-integrity findings, not just the
+    # issue text: an agent needs the structured pairs to rewrite the <link>s.
+    page = """<!doctype html>
+    <html lang="en"><head><meta charset="utf-8">
+    <title>Conflicting alternates demo page</title>
+    <link rel="alternate" hreflang="en" href="https://example.com/en">
+    <link rel="alternate" hreflang="fr" href="https://example.com/en">
+    <link rel="alternate" hreflang="de" href="https://example.com/de">
+    <link rel="alternate" hreflang="de" href="https://example.com/de-at">
+    </head><body><h1>Hi</h1></body></html>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, text=page)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n("https://example.com/en"))
+
+    assert result["hreflang_conflicts"] == [
+        {"hreflang": "de",
+         "urls": ["https://example.com/de", "https://example.com/de-at"]}
+    ]
+    assert result["hreflang_duplicate_urls"] == [
+        {"url": "https://example.com/en", "hreflang": ["en", "fr"]}
+    ]
+    codes = [i["code"] for i in result["issues"]]
+    assert "hreflang_conflict" in codes and "hreflang_duplicate_url" in codes
+    # every reported issue still ships an actionable fix hint
+    assert all(i["fix"] for i in result["issues"])

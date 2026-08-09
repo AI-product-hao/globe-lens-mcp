@@ -271,8 +271,9 @@ async def check_i18n(
     """Focused check of internationalization signals.
 
     Covers: `<html lang>` presence *and* BCP 47 validity, hreflang alternates
-    (value validity, x-default, self-reference), and whether `<html lang>`
-    agrees with the page's own hreflang entry.
+    (value validity, x-default, self-reference, and cluster integrity — one
+    code pointing at several URLs, or several codes claiming one URL), and
+    whether `<html lang>` agrees with the page's own hreflang entry.
 
     Args:
         url: The page to check.
@@ -327,6 +328,8 @@ async def check_i18n(
             "lang_hreflang_mismatch": report.lang_hreflang_mismatch,
             "hreflang": report.hreflang,
             "hreflang_self_ref": report.hreflang_self_ref,
+            "hreflang_conflicts": report.hreflang_conflicts,
+            "hreflang_duplicate_urls": report.hreflang_duplicate_urls,
             "issues": issues,
             "score": report.score,
             "truncated": truncated,
