@@ -99,7 +99,14 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   audits stay fast and bounded. When a target is unreachable, `audit_url` and
   `check_i18n` return a **structured error** (`{"ok": false, "status_code": …,
   "error": …}`) instead of throwing — so the agent can retry / report / skip
-  rather than lose the whole tool call. **Redirects are followed and the report
+  rather than lose the whole tool call. An **unfetchable URL** — no scheme
+  (`example.com`, `localhost:3000`), a non-http(s) scheme (`file:`, `data:`), a
+  missing host, whitespace in the host, or an unparseable value — is rejected
+  **before any request** with a specific message and, where obvious, a corrected
+  `suggestion` URL (e.g. `https://example.com`); `httpx.InvalidURL` (not a
+  `httpx.HTTPError` subclass) is caught as a clean structured error too, so a bad
+  argument never surfaces as a stack trace or a fake "site down". **Redirects are
+  followed and the report
   is computed against the final URL** (relative canonical/hreflang resolution,
   the self-referencing hreflang check, and robots.txt/sitemap.xml probing all
   use the page you actually landed on); `final_url` and `redirected` fields

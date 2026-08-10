@@ -203,6 +203,16 @@
 > (`hreflang_duplicate_url`). x-default sharing a URL and trailing-slash/port
 > differences are normalized, so only *real* contradictions are reported. 93
 > tests passing.
+>
+> **Updated 2026-08-10 (Day 30):** the streak is now 30+ days — an input-validation
+> fix that tightens the failure path further. A URL we cannot fetch
+> (`example.com`, `localhost:3000`) used to either raise a misleading "site is
+> down" transport error (behind a proxy) or, for the robots/sitemap tool,
+> produce a bogus pair of "unknown" probes that looked like an outage. Now all
+> three tools reject an unfetchable URL *before* opening a socket, with a
+> specific message and — where obvious — a corrected `suggestion` URL, while an
+> `httpx.InvalidURL` (not a subclass of `httpx.HTTPError`, so it escaped the
+> broad handler) is caught as a clean structured error. 104 tests passing.
 
 ---
 
@@ -294,6 +304,11 @@ first.
 - Unreachable targets (`404`/`500` or DNS/timeout) return a structured
   `{"ok": false, "status_code": …, "error": …}` instead of throwing, so the
   agent can retry / report / skip without losing the tool call.
+- Unfetchable inputs (no scheme, non-http(s) scheme, missing host, whitespace
+  in host, unparseable) are rejected **before** any request with a specific
+  message and — where obvious — a corrected `suggestion` URL; `httpx.InvalidURL`
+  (not a `httpx.HTTPError` subclass) is caught as a clean structured error too,
+  so a bad argument never surfaces as a stack trace or a fake "site down".
 
 ---
 
@@ -331,6 +346,7 @@ first.
 | 27 | 2026-08-07 | test coverage | lock down legacy `<a name>` anchors, media/iframe mixed-content, self-ref query/port, score clamp at 0, deterministic within-tier sort, JSON round-trip for MCP transport | **85 passed** |
 | 28 | 2026-08-08 | bug fix | two false negatives removed: inline `<svg><title>` icon labels no longer masquerade as the page title (SPA shells get their real `title_missing` error back), and only `<a name="…">` counts as a legacy anchor target (a `<meta name="description">` no longer validates a dead `href="#description"`) | **89 passed** |
 | 29 | 2026-08-09 | new audit dim | hreflang cluster-integrity: flags one `hreflang` code declared against several URLs (`hreflang_conflict`) and several codes pointing at the same URL (`hreflang_duplicate_url`) — both make Google silently discard the alternates; x-default sharing a URL and trailing-slash/port differences are normalized so only real contradictions are reported | **93 passed** |
+| 30 | 2026-08-10 | error handling | all three tools reject an unfetchable URL (bare host, non-http(s) scheme, missing host, whitespace in host, unparseable) *before* opening a socket, with a specific message and a corrected `suggestion` URL; `httpx.InvalidURL` (not a `httpx.HTTPError` subclass) is now caught; 11 new tests | **104 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -348,7 +364,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 28+ day streak of tested, documented, backward-compatible
+> project with a continuous 30+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -378,12 +394,13 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 29 days, 29+ real commits, 93 passing tests. GlobeLens now validates hreflang
+> 30 days, 30+ real commits, 104 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, noindex… and returns SEO issues *sorted by
-> severity* so your agent fixes the urgent stuff first. Small, tested,
-> documented — the kind of OSS I wish more tools were.
+> severity* so your agent fixes the urgent stuff first. Bare/garbled URLs are
+> rejected up front with a corrected suggestion instead of a misleading "site
+> is down". Small, tested, documented — the kind of OSS I wish more tools were.
 > github.com/AI-product-hao/globe-lens-mcp
 
 ### Reddit — r/selfhosted or r/dotnet / r/SideProject
