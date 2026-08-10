@@ -5,10 +5,12 @@ call to audit a public URL for internationalization and SEO readiness.
 """
 from __future__ import annotations
 
+import re
+
 import httpx
 from dataclasses import asdict
 from typing import Any
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 
 from fastmcp import FastMCP
 
@@ -130,6 +132,88 @@ def _http_error_result(url: str, status_code: int | None, message: str) -> dict:
     }
 
 
+# The only schemes these tools can audit. Anything else is either not a web
+# page at all (mailto:, tel:, javascript:) or not fetchable over HTTP
+# (file:, data:, ftp:).
+AUDITABLE_SCHEMES = ("http", "https")
+
+# "localhost:3000" / "example.com:8080/x" parse as scheme="localhost" with
+# path="3000" — a host:port that is missing its scheme, not an exotic
+# protocol. The digits-first path is what distinguishes it from a genuine
+# non-web scheme such as "data:text/html,..." or "mailto:a@b.c".
+_PORT_LIKE_RE = re.compile(r"^\d+($|[/?#])")
+
+
+def _invalid_url_result(url: str, message: str, suggestion: str | None) -> dict:
+    """Agent-friendly payload for a URL the tool cannot even attempt to fetch.
+
+    Same shape as `_http_error_result` (so callers branch on `ok` exactly
+    once) plus a `suggestion`: when the input is a recognisable typo — most
+    often a bare host with no scheme — we hand back the corrected string so
+    the agent can retry in a single step instead of guessing at the wording
+    of an error message.
+    """
+    return {
+        "ok": False,
+        "url": url,
+        "status_code": None,
+        "error": message,
+        "suggestion": suggestion,
+    }
+
+
+def _url_input_error(url: str) -> dict | None:
+    """Validate a caller-supplied URL; return an error payload, or None if OK.
+
+    Checked *before* any socket is opened, because a bad URL is a caller-side
+    mistake and dialling it out first only wastes a request (and, behind a
+    proxy, produces a misleading transport error such as "Server disconnected"
+    that looks like the site is down).
+
+    The messages are deliberately specific about *which* thing is wrong: the
+    HTTP client reports every one of these cases as "Request URL is missing an
+    'http://' or 'https://' protocol", which is plainly wrong for something
+    like `file:///etc/passwd` and sends an agent off to "fix" it by prefixing
+    a scheme it already has.
+    """
+    raw = url.strip() if isinstance(url, str) else ""
+    if not raw:
+        return _invalid_url_result(
+            url, "No URL was provided; pass an absolute http(s) URL, "
+                 "e.g. https://example.com.", None)
+    try:
+        parsed = urlparse(raw)
+    except ValueError as e:
+        # e.g. "http://[" raises "Invalid IPv6 URL" straight out of urlparse.
+        return _invalid_url_result(
+            url, f"URL could not be parsed ({e}); pass an absolute http(s) "
+                 f"URL, e.g. https://example.com.", None)
+
+    scheme = parsed.scheme.lower()
+    scheme_missing = not scheme or (
+        "://" not in raw and bool(_PORT_LIKE_RE.match(parsed.path or ""))
+    )
+    if scheme_missing:
+        # Strip a protocol-relative prefix ("//example.com") before suggesting.
+        return _invalid_url_result(
+            url, "URL has no scheme; prefix it with https:// (or http://).",
+            f"https://{raw.lstrip('/')}")
+    if scheme not in AUDITABLE_SCHEMES:
+        return _invalid_url_result(
+            url, f"Unsupported URL scheme '{scheme}'; only "
+                 f"{' and '.join(AUDITABLE_SCHEMES)} pages can be audited.",
+            None)
+    if not parsed.netloc:
+        return _invalid_url_result(
+            url, "URL has no host; write the full origin, "
+                 "e.g. https://example.com/page.", None)
+    if any(ch.isspace() for ch in parsed.netloc):
+        return _invalid_url_result(
+            url, f"URL host '{parsed.netloc}' contains whitespace; "
+                 f"percent-encode it or remove the stray space.", None)
+    return None
+
+
 def _is_redirect(resp: httpx.Response) -> bool:
     """True for a 3xx response that actually carries a Location header.
 
@@ -201,7 +285,14 @@ async def audit_url(
             301 (not 302) to the right target, or to see the language redirect
             on `/` rather than always landing on one locale. On a 3xx the tool
             then returns status_code + redirect_to instead of a page report.
+
+    A URL that cannot be fetched at all (no scheme, no host, unsupported
+    scheme, unparseable) is rejected up front with ok=false, a specific
+    error, and a `suggestion` holding the corrected URL when one is obvious.
     """
+    bad_url = _url_input_error(url)
+    if bad_url:
+        return bad_url
     headers = {
         "user-agent": user_agent
         or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
@@ -223,6 +314,13 @@ async def audit_url(
                 f"HTTP {e.response.status_code} returned by {url}.")
         except httpx.HTTPError as e:
             return _http_error_result(url, None, f"Request to {url} failed: {e}")
+        except httpx.InvalidURL as e:
+            # Not a subclass of httpx.HTTPError, so without this arm a URL the
+            # client rejects would escape as an unhandled exception — exactly
+            # the stack-trace-instead-of-result failure mode we removed
+            # everywhere else.
+            return _invalid_url_result(
+                url, f"URL rejected by the HTTP client: {e}", None)
         # Redirects are followed (http -> https, apex -> www, / -> /en/ ...),
         # so the body we analyze belongs to the *final* URL, not the requested
         # one. Analyzing against the requested URL would resolve relative
@@ -287,7 +385,12 @@ async def check_i18n(
             page it forwards to — e.g. to confirm that `/` really redirects to
             `/en/` for an English visitor instead of silently auditing one
             locale. On a 3xx the tool returns status_code + redirect_to.
+
+    Unfetchable URLs are rejected up front (see audit_url).
     """
+    bad_url = _url_input_error(url)
+    if bad_url:
+        return bad_url
     headers = {
         "user-agent": user_agent
         or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
@@ -309,6 +412,13 @@ async def check_i18n(
                 f"HTTP {e.response.status_code} returned by {url}.")
         except httpx.HTTPError as e:
             return _http_error_result(url, None, f"Request to {url} failed: {e}")
+        except httpx.InvalidURL as e:
+            # Not a subclass of httpx.HTTPError, so without this arm a URL the
+            # client rejects would escape as an unhandled exception — exactly
+            # the stack-trace-instead-of-result failure mode we removed
+            # everywhere else.
+            return _invalid_url_result(
+                url, f"URL rejected by the HTTP client: {e}", None)
         # Same as audit_url: analyze against the final (post-redirect) URL so
         # relative hreflang hrefs and the self-reference check use the page
         # the body actually came from.
@@ -352,7 +462,9 @@ async def check_robots_sitemap(
 
     `found` is True/False when the answer is known, and None when the probe
     itself failed (DNS, TLS, timeout) — a network error means "unknown", not
-    "missing".
+    "missing". A URL the tool cannot fetch at all is reported as ok=false
+    instead, so a caller-side typo is never dressed up as two "unknown"
+    probes that look like a site outage.
 
     Args:
         url: The site (or any page on it) to check.
@@ -360,6 +472,9 @@ async def check_robots_sitemap(
         user_agent: Override the default User-Agent.
         verify_ssl: Set False to skip TLS verification (e.g. staging sites).
     """
+    bad_url = _url_input_error(url)
+    if bad_url:
+        return bad_url
     headers = {
         "user-agent": user_agent
         or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"

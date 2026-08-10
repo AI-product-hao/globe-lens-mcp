@@ -657,3 +657,126 @@ def test_check_i18n_exposes_hreflang_cluster_conflicts():
     assert "hreflang_conflict" in codes and "hreflang_duplicate_url" in codes
     # every reported issue still ships an actionable fix hint
     assert all(i["fix"] for i in result["issues"])
+
+
+# ---------------------------------------------------------------------------
+# URL input validation: reject unfetchable URLs up front, before any socket.
+# ---------------------------------------------------------------------------
+
+def test_url_input_error_rejects_empty_string():
+    res = server._url_input_error("")
+    assert res is not None
+    assert res["ok"] is False
+    assert res["status_code"] is None
+    assert "No URL" in res["error"]
+    assert res["suggestion"] is None
+
+
+def test_url_input_error_flags_missing_scheme_with_suggestion():
+    # The most common caller mistake: a bare host. We return a corrected URL
+    # so an agent can retry in one step instead of guessing at wording.
+    res = server._url_input_error("example.com")
+    assert res["ok"] is False
+    assert "no scheme" in res["error"]
+    assert res["suggestion"] == "https://example.com"
+
+
+def test_url_input_error_treats_host_port_as_missing_scheme():
+    # "localhost:3000" parses as scheme="localhost", path="3000" — a host:port
+    # missing its scheme, not an exotic protocol. The digits-first path is what
+    # distinguishes it from "data:..." or "mailto:...".
+    res = server._url_input_error("localhost:3000")
+    assert res["ok"] is False
+    assert res["suggestion"] == "https://localhost:3000"
+    # and a host:port with a path is handled the same way
+    res2 = server._url_input_error("example.com:8080/x")
+    assert res2["suggestion"] == "https://example.com:8080/x"
+
+
+def test_url_input_error_rejects_unsupported_scheme():
+    # These have a scheme, but it is not http(s) — the old code reported them
+    # with "missing http:// or https:// protocol", which is plainly wrong for
+    # file:// and would send an agent off to "fix" a scheme it already has.
+    for bad in ("file:///etc/passwd", "data:text/html,<body>", "ftp://example.com"):
+        res = server._url_input_error(bad)
+        assert res["ok"] is False
+        assert "Unsupported URL scheme" in res["error"]
+        assert res["suggestion"] is None
+
+
+def test_url_input_error_rejects_missing_host_and_whitespace():
+    res = server._url_input_error("https://")
+    assert res["ok"] is False
+    assert "no host" in res["error"]
+    # a host with a stray space must not pass silently
+    res2 = server._url_input_error("https://exa mple.com")
+    assert res2["ok"] is False
+    assert "whitespace" in res2["error"]
+
+
+def test_url_input_error_catches_unparseable_url():
+    # urlparse itself raises ("http://[" -> Invalid IPv6 URL). We must surface
+    # that as a clean error, not let it escape as an unhandled exception.
+    res = server._url_input_error("http://[")
+    assert res["ok"] is False
+    assert "could not be parsed" in res["error"]
+
+
+def test_url_input_error_passes_valid_url():
+    for good in ("https://example.com", "https://example.com/path?q=1",
+                 "http://example.com:8080/x"):
+        assert server._url_input_error(good) is None
+
+
+def _refusing_client(*args, **kwargs):
+    """A client factory that fails the test if the guard did not short-circuit."""
+    raise AssertionError("HTTP client was opened despite an invalid URL")
+
+
+def test_audit_url_rejects_unfetchable_url_before_opening_a_client():
+    # A bad URL is a caller-side typo: we must reject it with a specific error
+    # and no network attempt, not dial out (and behind a proxy produce a
+    # misleading "Server disconnected" that looks like a site outage).
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.audit_url("example.com"))
+    assert result["ok"] is False
+    assert result["status_code"] is None
+    assert result["suggestion"] == "https://example.com"
+    assert "html_lang" not in result  # no partial report leaks out
+
+
+def test_check_i18n_rejects_unfetchable_url_before_opening_a_client():
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.check_i18n("localhost:3000"))
+    assert result["ok"] is False
+    assert result["suggestion"] == "https://localhost:3000"
+
+
+def test_check_robots_sitemap_rejects_unfetchable_url_before_opening_a_client():
+    # Previously a bare host produced two "unknown" probes that looked like a
+    # site outage; now it is a single clear ok=false with the caller's error.
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.check_robots_sitemap("file:///etc/passwd"))
+    assert result["ok"] is False
+    assert "Unsupported URL scheme" in result["error"]
+    assert "robots_txt" not in result  # not dressed up as two probes
+
+
+def test_audit_url_catches_client_rejected_invalid_url():
+    # httpx.InvalidURL is NOT a subclass of httpx.HTTPError, so the broad
+    # `except httpx.HTTPError` arm does not catch it — without this test's
+    # target arm a rejected URL would escape as an unhandled exception.
+    def make_client(*args, **kwargs):
+        def boom(request: httpx.Request) -> httpx.Response:
+            raise httpx.InvalidURL("Invalid URL")
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(boom), **_fwd_kwargs(kwargs)
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com:notaport/"))
+
+    assert result["ok"] is False
+    assert result["status_code"] is None
+    assert "rejected by the HTTP client" in result["error"]
+    assert "html_lang" not in result
