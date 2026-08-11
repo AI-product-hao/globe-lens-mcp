@@ -314,6 +314,22 @@ def _link_fetches_subresource(tag) -> bool:
     return bool(set(_rel_values(tag)) & FETCHING_LINK_RELS)
 
 
+def _srcset_urls(value: str) -> list[str]:
+    """Extract candidate URLs from a `srcset` attribute value.
+
+    A srcset is a comma-separated list of ``"url [descriptor]"`` candidates; the
+    descriptor (a pixel density like ``2x`` or a width like ``640w``) is
+    optional and must not be mistaken for part of the URL. Only the first
+    whitespace-separated token of each candidate is a URL.
+    """
+    urls: list[str] = []
+    for candidate in value.split(","):
+        token = candidate.strip().split()[0] if candidate.strip() else ""
+        if token:
+            urls.append(token)
+    return urls
+
+
 # Foreign-namespace elements whose <title> children are *not* the document
 # title: SVG <title> is an accessible name for the graphic, MathML <title>
 # likewise. Browsers and search engines only ever use the HTML <title>.
@@ -709,13 +725,26 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 continue
             attr = "href" if tag.name == "link" else "src"
             val = tag.get(attr)
-            if not isinstance(val, str):
-                continue
-            val = val.strip()
-            if val.lower().startswith("http://"):
-                report.mixed_content.append(
-                    {"tag": tag.name, "attr": attr, "url": val}
-                )
+            if isinstance(val, str):
+                val = val.strip()
+                if val.lower().startswith("http://"):
+                    report.mixed_content.append(
+                        {"tag": tag.name, "attr": attr, "url": val}
+                    )
+            # `srcset` (responsive images on <img> / <source>) is a separate
+            # attribute the browser still loads — an http:// entry there is just
+            # as much mixed content as one in `src`, but the check above only
+            # looked at `src`, so image-heavy / responsive sites were silently
+            # missing it (browsers block it the same way). The https candidate
+            # in a srcset is, correctly, NOT mixed content.
+            if tag.name in ("img", "source"):
+                ss = tag.get("srcset")
+                if isinstance(ss, str):
+                    for u in _srcset_urls(ss):
+                        if u.lower().startswith("http://"):
+                            report.mixed_content.append(
+                                {"tag": tag.name, "attr": "srcset", "url": u}
+                            )
         if report.mixed_content:
             report.issues.append(Issue(
                 "warning", "mixed_content",

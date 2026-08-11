@@ -965,6 +965,36 @@ def test_mixed_content_covers_media_and_frame_subresources():
     assert all(m["attr"] == "src" for m in r.mixed_content)
 
 
+SAMPLE_SRCSET_MIXED = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Srcset Mixed Content</title></head>
+<body><h1>Hi</h1>
+  <img src="https://cdn.example.com/a.png" alt="ok"
+       srcset="http://old-cdn.example.com/b.jpg 1x, https://cdn.example.com/c.png 2x">
+  <picture>
+    <source media="(min-width: 800px)" srcset="http://legacy.example.com/hero.webp">
+    <img src="https://cdn.example.com/hero.jpg" alt="ok">
+  </picture>
+</body></html>"""
+
+
+def test_flags_mixed_content_in_srcset():
+    # An http:// URL inside `srcset` is real mixed content on an HTTPS page,
+    # but it lives in a separate attribute from `src`. GlobeLens must catch it
+    # (responsive / image-heavy sites were previously blind to it), while the
+    # https srcset candidates and the https `src` must never be flagged.
+    r = analyze_html(SAMPLE_SRCSET_MIXED, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "mixed_content" in codes
+    srcset_hits = [m for m in r.mixed_content if m["attr"] == "srcset"]
+    urls = {m["url"] for m in srcset_hits}
+    assert "http://old-cdn.example.com/b.jpg" in urls
+    assert "http://legacy.example.com/hero.webp" in urls
+    # both insecure entries are exactly the two http:// srcset URLs; the https
+    # srcset candidate and the https `src` are not counted
+    assert len(r.mixed_content) == 2
+    assert all(not u.startswith("https://") for u in urls)
+
+
 SAMPLE_QUERY_SELF_REF = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Query String Self Reference Demo</title>
