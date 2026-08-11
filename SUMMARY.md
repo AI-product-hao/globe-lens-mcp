@@ -213,6 +213,19 @@
 > specific message and — where obvious — a corrected `suggestion` URL, while an
 > `httpx.InvalidURL` (not a subclass of `httpx.HTTPError`, so it escaped the
 > broad handler) is caught as a clean structured error. 104 tests passing.
+>
+> **Updated 2026-08-11 (Day 31):** the streak is now 31+ days — a coverage-closing
+> fix on an existing dimension: **mixed-content detection now also scans `srcset`**.
+> Responsive images declare their sources in the separate `srcset` attribute
+> (e.g. `<img srcset="http://old-cdn/x.jpg 1x, https://cdn/y.png 2x">`); an
+> `http://` entry there is blocked by browsers exactly like one in `src`, but the
+> check only looked at `src`/`href`, so image-heavy and responsive sites were
+> silently blind to a real mixed-content warning. A new `_srcset_urls` helper
+> parses the comma/descriptor list and the scan now covers `<img>`/`<source>`,
+> while `https://` srcset candidates are correctly left alone. This day also ships
+> the project's **first concrete real-world walkthrough** in the README
+> (audit → fix the highest-priority issue → re-audit), directly strengthening the
+> "real usage scenario" evidence the application asks for. 105 tests passing.
 
 ---
 
@@ -277,7 +290,8 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
   and only inspecting `<link>` rels the browser actually fetches (`stylesheet`,
   `icon`, `preload`, `manifest`, …) so metadata links (`canonical`, `hreflang`,
   `prev`/`next`) and connection hints (`preconnect`, `dns-prefetch`) are not
-  miscounted.
+  miscounted. As of Day 31 it also scans `srcset` on `<img>`/`<source>`
+  (responsive-image sources), while `https://` srcset candidates stay unflagged.
 - **Broken in-page anchors** — `href="#frag"` links whose target `id`/`name` does
   not exist in the document (they look fine in source but do nothing on click).
 - **Unsafe external `target="_blank"` links** — cross-origin `http(s)` links that
@@ -347,6 +361,7 @@ first.
 | 28 | 2026-08-08 | bug fix | two false negatives removed: inline `<svg><title>` icon labels no longer masquerade as the page title (SPA shells get their real `title_missing` error back), and only `<a name="…">` counts as a legacy anchor target (a `<meta name="description">` no longer validates a dead `href="#description"`) | **89 passed** |
 | 29 | 2026-08-09 | new audit dim | hreflang cluster-integrity: flags one `hreflang` code declared against several URLs (`hreflang_conflict`) and several codes pointing at the same URL (`hreflang_duplicate_url`) — both make Google silently discard the alternates; x-default sharing a URL and trailing-slash/port differences are normalized so only real contradictions are reported | **93 passed** |
 | 30 | 2026-08-10 | error handling | all three tools reject an unfetchable URL (bare host, non-http(s) scheme, missing host, whitespace in host, unparseable) *before* opening a socket, with a specific message and a corrected `suggestion` URL; `httpx.InvalidURL` (not a `httpx.HTTPError` subclass) is now caught; 11 new tests | **104 passed** |
+| 31 | 2026-08-11 | coverage fix | mixed-content detection now also scans `srcset` on `<img>`/`<source>` (responsive-image sources were previously invisible); README adds the project's first concrete real-world walkthrough | **105 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -364,7 +379,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 30+ day streak of tested, documented, backward-compatible
+> project with a continuous 31+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -394,7 +409,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 30 days, 30+ real commits, 104 passing tests. GlobeLens now validates hreflang
+> 31 days, 31+ real commits, 105 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, noindex… and returns SEO issues *sorted by

@@ -20,7 +20,8 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   canonical, viewport, charset, Open Graph / Twitter cards, **H1 structure**
   (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**
-  (insecure `http://` subresources on HTTPS pages), **broken in-page anchor
+  (insecure `http://` subresources on HTTPS pages — including `srcset`
+  responsive images), **broken in-page anchor
   links** (`href="#frag"` pointing to a missing target), **unsafe external
   `target="_blank"` links** (cross-origin links that open a new tab without
   `rel="noopener noreferrer"` — reverse-tabnabbing / Lighthouse "unsafe
@@ -167,6 +168,42 @@ It calls `audit_url` and returns something like:
   ]
 }
 ```
+
+## Real-world walkthrough
+
+Imagine you just shipped a bilingual landing page. Ask your agent:
+
+> "Audit https://my-site.com/es and fix the worst SEO/i18n issues GlobeLens
+> reports, starting with the highest-priority one."
+
+The agent calls `audit_url` and gets a prioritized report. A real (abbreviated)
+result for a page that forgot its Spanish hreflang cluster:
+
+```json
+{
+  "url": "https://my-site.com/es",
+  "html_lang": "es",
+  "score": 71,
+  "issues": [
+    { "severity": "warning", "code": "hreflang_no_self_ref", "priority": 2,
+      "message": "hreflang set does not reference this page itself; Google requires a self-referencing hreflang link…",
+      "fix": "Add an hreflang link whose href is this page's own URL to the alternate set." },
+    { "severity": "warning", "code": "hreflang_no_default", "priority": 2,
+      "message": "No x-default hreflang; recommended for international sites.",
+      "fix": "Add <link rel=\"alternate\" hreflang=\"x-default\" href=\"...\"> pointing to the fallback version." },
+    { "severity": "info", "code": "og_missing", "priority": 1,
+      "message": "Missing Open Graph tags; weak social sharing preview.",
+      "fix": "Add <meta property=\"og:title\" …> and <meta property=\"og:description\" …> for social sharing previews." }
+  ]
+}
+```
+
+Because every issue carries a `priority` and an actionable `fix`, the agent
+fixes the two `warning`s first (add the self-referencing `es` link + an
+`x-default`), then the Open Graph tags — no extra research needed. Re-running
+`audit_url` then shows `score` climbing as each fix lands. That loop —
+**audit → fix the highest-priority issue → re-audit** — is exactly the
+real usage scenario GlobeLens is built for.
 
 ## Tool options
 
