@@ -29,7 +29,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   detection** (body word count below a healthy threshold, script/style
   boilerplate excluded, and **script-aware**: Chinese, Japanese and Thai text
   has no spaces, so it is measured by character count instead of being scored
-  as a single word), **conflicting `canonical` detection** (multiple
+  as a single word), **favicon presence** (a missing `<link rel="icon">` is
+  flagged as a cheap brand-recognition fix for tabs, bookmarks and search
+  results), **conflicting `canonical` detection** (multiple
   `rel="canonical"` links pointing to *different* URLs — which makes search
   engines ignore the canonical signal entirely; duplicate links resolving to the
   same address are not flagged), **`meta refresh` detection**

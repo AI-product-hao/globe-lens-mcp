@@ -226,6 +226,17 @@
 > the project's **first concrete real-world walkthrough** in the README
 > (audit → fix the highest-priority issue → re-audit), directly strengthening the
 > "real usage scenario" evidence the application asks for. 105 tests passing.
+>
+> **Updated 2026-08-12 (Day 32):** the streak is now 32+ days — a new audit
+> dimension shipped: **favicon presence detection**. A missing favicon weakens
+> brand recognition in browser tabs, bookmarks and search-result snippets that
+> show one, and is a cheap, single-line fix many sites genuinely forget. GlobeLens
+> now reads the `<head>` for any conventional icon rel (`icon`, `shortcut icon`,
+> `apple-touch-icon`, `mask-icon`, `fluid-icon`) and, when none is declared,
+> reports `favicon_missing` (info) with a concrete `fix` hint; the common
+> `shortcut icon` spelling and an `apple-touch-icon` are correctly accepted as
+> present, while canonical/stylesheet/other links are never mistaken for a favicon.
+> It is a pure-HTML, network-free, fully unit-tested addition (107 tests passing).
 
 ---
 
@@ -301,6 +312,10 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
 - **Thin content** — visible body word count (script/style boilerplate excluded)
   below `THIN_CONTENT_MIN_WORDS = 300`, flagging low-value pages search engines
   demote.
+- **Favicon presence** — flags a missing `<link rel="icon">` (any conventional
+  icon rel: `icon`, `shortcut icon`, `apple-touch-icon`, `mask-icon`,
+  `fluid-icon`) as `favicon_missing` (info) — a cheap brand-recognition fix for
+  tabs, bookmarks and search-result snippets; the exact rel form is irrelevant.
 - **Truncation signal** — `page_truncated` info when the page exceeded 2 MiB.
 - **Degenerate input** — `empty_html` error (score 0) instead of a crash.
 - **Crawl readiness** — live `robots.txt` / `sitemap.xml` presence.
@@ -362,6 +377,7 @@ first.
 | 29 | 2026-08-09 | new audit dim | hreflang cluster-integrity: flags one `hreflang` code declared against several URLs (`hreflang_conflict`) and several codes pointing at the same URL (`hreflang_duplicate_url`) — both make Google silently discard the alternates; x-default sharing a URL and trailing-slash/port differences are normalized so only real contradictions are reported | **93 passed** |
 | 30 | 2026-08-10 | error handling | all three tools reject an unfetchable URL (bare host, non-http(s) scheme, missing host, whitespace in host, unparseable) *before* opening a socket, with a specific message and a corrected `suggestion` URL; `httpx.InvalidURL` (not a `httpx.HTTPError` subclass) is now caught; 11 new tests | **104 passed** |
 | 31 | 2026-08-11 | coverage fix | mixed-content detection now also scans `srcset` on `<img>`/`<source>` (responsive-image sources were previously invisible); README adds the project's first concrete real-world walkthrough | **105 passed** |
+| 32 | 2026-08-12 | new audit dim | favicon presence detection (`favicon_missing` info when no `<link rel="icon">`/shortcut icon/apple-touch-icon/… is declared); pure HTML, network-free, tested | **107 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -379,7 +395,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 31+ day streak of tested, documented, backward-compatible
+> project with a continuous 32+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -409,12 +425,12 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 31 days, 31+ real commits, 105 passing tests. GlobeLens now validates hreflang
+> 32 days, 32+ real commits, 107 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
-> unsafe target="_blank" links, noindex… and returns SEO issues *sorted by
-> severity* so your agent fixes the urgent stuff first. Bare/garbled URLs are
-> rejected up front with a corrected suggestion instead of a misleading "site
+> unsafe target="_blank" links, missing favicons, noindex… and returns SEO issues
+> *sorted by severity* so your agent fixes the urgent stuff first. Bare/garbled URLs
+> are rejected up front with a corrected suggestion instead of a misleading "site
 > is down". Small, tested, documented — the kind of OSS I wish more tools were.
 > github.com/AI-product-hao/globe-lens-mcp
 

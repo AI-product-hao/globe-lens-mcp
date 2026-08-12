@@ -121,6 +121,7 @@ FIX_HINTS: dict[str, str] = {
     "meta_refresh_redirect": 'Replace the <meta http-equiv="refresh"> tag with a real server-side redirect (301 for permanent, 302 for temporary).',
     "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
     "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
+    "favicon_missing": 'Add <link rel="icon" href="/favicon.ico"> (and an apple-touch-icon for iOS) to <head> so the page shows a brand icon in tabs, bookmarks and search results.',
 }
 
 # <meta http-equiv="refresh" content="..."> payloads seen in the wild:
@@ -251,6 +252,9 @@ class AuditReport:
     meta_refresh_delay: int | None = None
     meta_refresh_url: str | None = None
     has_json_ld: bool = False
+    # False = no favicon <link> found (check not applicable only on feeds/docs
+    # with no browser representation; for a normal HTML page it is a miss).
+    has_favicon: bool = False
     canonical: str | None = None
     canonical_url: str | None = None
     # All distinct canonical URLs declared on the page (absolute form). Empty
@@ -633,6 +637,28 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
 
     if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
         report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
+
+    # --- favicon / browser-tab icon presence ---
+    # A missing favicon weakens brand recognition in browser tabs, bookmarks and
+    # search-result snippets that display one, and is a cheap, single-line fix
+    # many sites genuinely forget. We accept any of the conventional icon rel
+    # values as "present" (icon / shortcut icon / apple-touch-icon / mask-icon /
+    # fluid-icon) — the exact form is a stylistic choice, not an audit failure.
+    # This is a link-declaration check only: GlobeLens does not fetch
+    # /favicon.ico, consistent with the analyzer's network-free design.
+    _FAVICON_RELS = {"icon", "shortcut icon", "apple-touch-icon",
+                     "apple-touch-icon-precomposed", "mask-icon", "fluid-icon"}
+    has_favicon = False
+    for link in soup.find_all("link"):
+        if _FAVICON_RELS & set(_rel_values(link)):
+            has_favicon = True
+            break
+    report.has_favicon = has_favicon
+    if not has_favicon:
+        report.issues.append(Issue(
+            "info", "favicon_missing",
+            "No favicon <link> found; add one so the page shows a brand icon "
+            "in tabs, bookmarks and search results."))
 
     # --- crawl / index control: meta robots ---
     meta_robots = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "robots"})

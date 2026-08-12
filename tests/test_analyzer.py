@@ -10,6 +10,7 @@ SAMPLE_GOOD = """<!doctype html>
   <link rel="canonical" href="https://example.com/">
   <link rel="alternate" hreflang="en" href="https://example.com/en">
   <link rel="alternate" hreflang="x-default" href="https://example.com/">
+  <link rel="icon" href="/favicon.ico">
   <meta property="og:title" content="Example">
   <meta property="og:description" content="desc">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>
@@ -446,6 +447,45 @@ def test_flags_missing_og_tags():
     # SAMPLE_BAD has no OG tags at all -> the og_missing info must fire
     r = analyze_html(SAMPLE_BAD, "https://example.com")
     assert "og_missing" in [i.code for i in r.issues]
+
+
+# --- favicon / browser-tab icon presence ---
+# A missing favicon is a common, cheap-to-fix gap that hurts brand recognition in
+# tabs, bookmarks and search-result snippets. We flag its *absence* (info), not
+# its form — any conventional icon rel counts as present.
+def test_accepts_favicon_link_as_present():
+    html = (
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>Favicon Present Demo Page</title>"
+        '<link rel="icon" href="/favicon.ico">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert r.has_favicon is True
+    assert "favicon_missing" not in [i.code for i in r.issues]
+    # the legacy "shortcut icon" spelling is the same declaration, not a miss
+    html2 = html.replace('rel="icon"', 'rel="shortcut icon"')
+    r2 = analyze_html(html2, "https://example.com")
+    assert r2.has_favicon is True
+    assert "favicon_missing" not in [i.code for i in r2.issues]
+
+
+def test_flags_missing_favicon():
+    # No <link rel="...icon"> at all -> flagged; a canonical or stylesheet link
+    # must NOT be mistaken for a favicon.
+    html = (
+        '<html lang="en"><head><meta charset="utf-8">'
+        "<title>No Favicon Demo Page</title>"
+        '<link rel="canonical" href="/">'
+        '<link rel="stylesheet" href="/style.css">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert r.has_favicon is False
+    issue = next(i for i in r.issues if i.code == "favicon_missing")
+    assert issue.severity == "info"
+    assert issue.fix and "favicon" in issue.fix.lower()
+
 
 
 def test_robots_sitemap_urls_across_url_shapes():
