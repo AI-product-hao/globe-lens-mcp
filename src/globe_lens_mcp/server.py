@@ -257,6 +257,7 @@ async def audit_url(
     verify_ssl: bool = True,
     max_bytes: int | None = None,
     follow_redirects: bool = True,
+    probe_robots_sitemap: bool = True,
 ) -> dict:
     """Audit a public URL for SEO & internationalization readiness.
 
@@ -283,8 +284,13 @@ async def audit_url(
         follow_redirects: Set False to inspect the URL itself instead of the
             page it forwards to. Useful to verify a migration really returns
             301 (not 302) to the right target, or to see the language redirect
-            on `/` rather than always landing on one locale. On a 3xx the tool
+            on `/`             rather than always landing on one locale. On a 3xx the tool
             then returns status_code + redirect_to instead of a page report.
+        probe_robots_sitemap: Set False to skip the two extra HTTP requests that
+            fetch robots.txt / sitemap.xml. Useful when auditing many pages
+            where you only need the on-page report, or to avoid rate-limiting
+            the host. When skipped, has_robots_txt and has_sitemap come back as
+            null ("not checked") rather than true/false.
 
     A URL that cannot be fetched at all (no scheme, no host, unsupported
     scheme, unparseable) is rejected up front with ok=false, a specific
@@ -339,16 +345,23 @@ async def audit_url(
         # page's own redirect.
         # A 200 alone is not proof: catch-all SPA rewrites serve index.html for
         # both paths, so we also check the response really looks like the file.
-        try:
-            r = await client.get(robots_url, follow_redirects=True)
-            report.has_robots_txt = _is_robots_txt(r)
-        except Exception:
-            report.has_robots_txt = None
-        try:
-            s = await client.get(sitemap_url, follow_redirects=True)
-            report.has_sitemap = _is_sitemap_xml(s)
-        except Exception:
-            report.has_sitemap = None
+        # The robots.txt / sitemap.xml probes are two extra HTTP requests per
+        # call. They are on by default (cheap and useful for a single audit),
+        # but an agent crunching a batch of URLs may want only the on-page
+        # report — or must avoid hammering a host with 3x the requests. When
+        # skipped, the two fields stay null ("not checked") rather than true/
+        # false, which is honest: we did not look.
+        if probe_robots_sitemap:
+            try:
+                r = await client.get(robots_url, follow_redirects=True)
+                report.has_robots_txt = _is_robots_txt(r)
+            except Exception:
+                report.has_robots_txt = None
+            try:
+                s = await client.get(sitemap_url, follow_redirects=True)
+                report.has_sitemap = _is_sitemap_xml(s)
+            except Exception:
+                report.has_sitemap = None
         out = report.to_dict()
         out["url"] = url  # what the caller asked for, kept for traceability
         out["final_url"] = final_url

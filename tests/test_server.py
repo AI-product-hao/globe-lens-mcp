@@ -553,6 +553,31 @@ def test_audit_url_rejects_spa_fallback_html_as_robots_and_sitemap():
     assert result["title"] == "Options Test"  # the page itself still audited
 
 
+def test_audit_url_skips_robots_sitemap_probes_when_disabled():
+    # When an agent audits many pages it does not want two extra HTTP requests
+    # per URL (rate-limit / speed). Disabling the probes must skip them and
+    # leave has_robots_txt / has_sitemap unset (null = "not checked"), while
+    # still auditing the page itself.
+    seen: list = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, text=SAMPLE)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/", probe_robots_sitemap=False
+        ))
+
+    assert seen == ["https://example.com/"]  # only the page was fetched
+    assert result["has_robots_txt"] is None
+    assert result["has_sitemap"] is None
+    assert result["html_lang"] == "en"  # the page itself was still audited
+
+
 def test_check_robots_sitemap_unmasks_soft_200_and_reports_status():
     def make_client(*args, **kwargs):
         return REAL_CLIENT(transport=_spa_host_transport(), **_fwd_kwargs(kwargs))
