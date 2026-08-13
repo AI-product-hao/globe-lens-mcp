@@ -219,11 +219,13 @@ and for matching how real users or crawlers see your pages:
 | `verify_ssl` | `true` | Set `false` to audit staging sites with self-signed certs. |
 | `max_bytes` | `2097152` (2 MiB) | Cap on the HTML fed to the parser (`audit_url` / `check_i18n`). Raise it to fully audit heavy SPA pages; lower it to keep audits of huge pages fast. Values below 1 KiB are clamped up, and truncation is always flagged (`page_truncated` / `truncated`). |
 | `follow_redirects` | `true` | Set `false` to inspect the URL *itself* instead of the page it forwards to (`audit_url` / `check_i18n`). |
+| `probe_robots_sitemap` | `true` | Set `false` to skip the two extra `robots.txt` / `sitemap.xml` requests (`audit_url` only). Audit many pages at once, or avoid rate-limiting the host; `has_robots_txt` / `has_sitemap` then come back as `null` ("not checked"). |
 
 ```json
 { "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
 { "url": "https://heavy-spa.example.com", "max_bytes": 8388608 }
 { "url": "https://example.com/old-page", "follow_redirects": false }
+{ "url": "https://example.com", "probe_robots_sitemap": false }
 ```
 
 ### Inspecting a redirect instead of following it

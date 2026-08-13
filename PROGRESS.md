@@ -350,3 +350,13 @@
 - **测试结果**：`pytest -q` → 107 passed。
 - **对 Codex for OSS 申请的贡献（Day 32）**：持续活跃进入第 32 天（满一个月 + 2 天）。本次回到「能审计什么」上加法，选的是**ROI 极高、却几乎被所有轻量审计工具忽略**的信号：favicon 缺失不是「有没有」这种表层检查，而是「一个站点常忘、一行就能修、却天天在标签页/书签/搜索结果里丢品牌」的真实体验坑——正是 AI agent 在生成页面模板时值得即时兜底的错误。实现上延续一贯的克制：只认「是否声明过 icon」、不挑写法、绝不把 canonical/stylesheet 误当 favicon，并配正反例测试钉死边界。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25/D29/D32、工具参数 D2/D17/D24、健壮性/边界修复 D4/D6/D13/D15/D19/D21/D23/D26/D28/D31、严重级别/文案 D7/D16、错误处理 D9/D30、测试覆盖 D11/D27），无连续同类、无破坏性变更、无新依赖——连续 32 天真实提交，「长期在维护 + 能力持续变厚 + 会自我纠错 + 文档讲清真实用法」的证据链持续加长。
 - **下一步（Day 33）候选（避开「新增审计维度」，上次是 D32）**：① 工具可选参数（上次 D24，间隔 8 天）；② 测试覆盖（上次 D27，间隔 5 天）；③ 改进 Issue 文案/输出可用性（上次 D16，间隔 16 天）；④ README 真实示例增强延续（如「真实站点审计前后对比」/ Cursor·Claude Code 接入 GIF 或步骤）；⑤ 边界 bug 修复（上次 D31，间隔 1 天，可放宽）。暂无已知 latent bug。
+
+## Day 33 — 2026-08-13（持续维护，Day 32 之后的第 1 天）
+- **改动类型：工具可选参数（与 Day 32「新增审计维度」不同类，满足避免连续同类规则；上次同类是 D24，间隔 9 天）**。GlobeLens 的 `audit_url` 每次调用都会顺带发两个额外 HTTP 请求（`/robots.txt` + `/sitemap.xml`），对**单次**审计是便宜又有用的，但当一个 agent 批量审计很多页面时，这就是 3 倍请求量——要么拖慢、要么把目标主机打进限流。这次把这个行为做成开关：新增参数 `probe_robots_sitemap: bool = True`（默认不变，完全向后兼容）。
+  - `server.py`：`audit_url` 签名加 `probe_robots_sitemap`（紧跟 `follow_redirects`，与既有可选参数排在一起）；docstring 的 Args 补对应条目（说明设 `false` 时省两个请求、两个探测字段回落为 `null` = "not checked"）；把既有的两个 `robots/sitemap` 探测 `try/except` 块整体包进 `if probe_robots_sitemap:`——跳过时 `has_robots_txt` / `has_sitemap` 保持 dataclass 默认值 `None`（语义上诚实：没去查，而非"不存在"）。零新字段、零新依赖、成功路径零改动。
+  - README：Tool options 表补 `probe_robots_sitemap` 一行（含「audit_url only」标注与 `null` 语义），示例 JSON 数组补一条 `{ "url": "https://example.com", "probe_robots_sitemap": false }`。
+- **测试**：`tests/test_server.py` 新增 `test_audit_url_skips_robots_sitemap_probes_when_disabled`——用 `seen` 列表断言只发了 1 个请求（页面本身，无 robots/sitemap 探测）、`has_robots_txt is None` / `has_sitemap is None`、`html_lang=="en"`（页面仍被审计）；pytest 107 → 108 passed，零回归。
+- **文档**：README Tool options + 示例同步；`SUMMARY.md` 增量更新（追加 Day 33 行、工具参数清单补 `probe_robots_sitemap`、价值陈述与 X draft 2 更新为 33+ day streak / 108 tests）。
+- **测试结果**：`pytest -q` → 108 passed。
+- **对 Codex for OSS 申请的贡献（Day 33）**：持续活跃进入第 33 天（满一个月 + 3 天）。本次属于「让工具在真实工作流里更好用」这一类——批量审计是 agent 用户最自然的用法之一，而 3 倍请求量会真实卡住它；把探测做成可关，是对**真实使用场景**的直接回应，且完全向后兼容（默认不破任何既有调用）。延续一贯克制：跳过时字段回落为 `null` 而非假阴性，绝不误导。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25/D29/D32、工具参数 D2/D17/D24/D33、健壮/边界修复 D4/D6/D13/D15/D19/D21/D23/D26/D28/D31、严重级别/文案 D7/D16、错误处理 D9/D30、测试覆盖 D11/D27），无连续同类、无破坏性变更、无新依赖——连续 33 天真实提交，「长期在维护 + 能力持续变厚 + 会自我纠错 + 文档讲清真实用法」的证据链持续加长。
+- **下一步（Day 34）候选（避开「工具可选参数」，上次是 D33）**：① 测试覆盖（上次 D27，间隔 6 天）；② 改进 Issue 文案/输出可用性（上次 D16，间隔 17 天）；③ README 真实示例增强延续（如「真实站点审计前后对比」/ Cursor·Claude Code 接入 GIF 或步骤）；④ 边界 bug 修复（上次 D31，间隔 2 天，可放宽）；⑤ 新增审计维度（上次 D32，间隔 1 天，可放宽，避开已覆盖项）。暂无已知 latent bug。

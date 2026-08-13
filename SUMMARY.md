@@ -227,16 +227,15 @@
 > (audit → fix the highest-priority issue → re-audit), directly strengthening the
 > "real usage scenario" evidence the application asks for. 105 tests passing.
 >
-> **Updated 2026-08-12 (Day 32):** the streak is now 32+ days — a new audit
-> dimension shipped: **favicon presence detection**. A missing favicon weakens
-> brand recognition in browser tabs, bookmarks and search-result snippets that
-> show one, and is a cheap, single-line fix many sites genuinely forget. GlobeLens
-> now reads the `<head>` for any conventional icon rel (`icon`, `shortcut icon`,
-> `apple-touch-icon`, `mask-icon`, `fluid-icon`) and, when none is declared,
-> reports `favicon_missing` (info) with a concrete `fix` hint; the common
-> `shortcut icon` spelling and an `apple-touch-icon` are correctly accepted as
-> present, while canonical/stylesheet/other links are never mistaken for a favicon.
-> It is a pure-HTML, network-free, fully unit-tested addition (107 tests passing).
+> **Updated 2026-08-13 (Day 33):** the streak is now 33+ days. The `audit_url`
+> tool gained a `probe_robots_sitemap` option (default `true`) that lets a caller
+> skip the two extra `robots.txt` / `sitemap.xml` HTTP requests — essential when
+> batch-auditing many URLs to avoid 3x request volume and host rate-limiting. When
+> disabled, `has_robots_txt` / `has_sitemap` come back as `null` ("not checked")
+> rather than a false signal. Pure-server, backward-compatible, fully tested
+> (108 tests passing). The favicon presence detection (Day 32) reads the `<head>`
+> for any conventional icon rel and, when none is declared, reports
+> `favicon_missing` (info) with a concrete `fix` hint.
 
 ---
 
@@ -261,14 +260,18 @@ ship sites that are correct across regions and languages.
 
 | Tool | Signature | What it returns |
 | --- | --- | --- |
-| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
+| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None, follow_redirects=True, probe_robots_sitemap=True)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
 | `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | i18n-focused subset: `html_lang` + `lang_valid`, `hreflang` alternates, `x-default`, `hreflang_self_ref`, `lang_hreflang_mismatch`, filtered+sorted issues, `truncated` flag. |
 | `check_robots_sitemap` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | Whether the site exposes `robots.txt` and `sitemap.xml` (presence + fetch error detail). |
 
 All three accept optional `timeout` / `user_agent` / `verify_ssl` for real
 staging/preview/self-signed-cert workflows. `audit_url` / `check_i18n` additionally
 accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values below
-1 KiB are clamped up; truncation is always flagged).
+1 KiB are clamped up; truncation is always flagged). `audit_url` also accepts
+`follow_redirects` (default `true`; set `false` to inspect a URL instead of its
+destination) and `probe_robots_sitemap` (default `true`; set `false` to skip the two
+robots.txt / sitemap.xml requests when batch-auditing, leaving `has_robots_txt` /
+`has_sitemap` as `null`).
 
 ---
 
@@ -378,6 +381,7 @@ first.
 | 30 | 2026-08-10 | error handling | all three tools reject an unfetchable URL (bare host, non-http(s) scheme, missing host, whitespace in host, unparseable) *before* opening a socket, with a specific message and a corrected `suggestion` URL; `httpx.InvalidURL` (not a `httpx.HTTPError` subclass) is now caught; 11 new tests | **104 passed** |
 | 31 | 2026-08-11 | coverage fix | mixed-content detection now also scans `srcset` on `<img>`/`<source>` (responsive-image sources were previously invisible); README adds the project's first concrete real-world walkthrough | **105 passed** |
 | 32 | 2026-08-12 | new audit dim | favicon presence detection (`favicon_missing` info when no `<link rel="icon">`/shortcut icon/apple-touch-icon/… is declared); pure HTML, network-free, tested | **107 passed** |
+| 33 | 2026-08-13 | tool options | `audit_url` gains `probe_robots_sitemap` (default `true`) to skip the two extra robots.txt / sitemap.xml requests when batch-auditing — avoids 3x request volume / host rate-limiting; fields fall back to `null` when off; backward-compatible | **108 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -395,7 +399,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 32+ day streak of tested, documented, backward-compatible
+> project with a continuous 33+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -425,14 +429,15 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 32 days, 32+ real commits, 107 passing tests. GlobeLens now validates hreflang
+> 33 days, 33+ real commits, 108 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, missing favicons, noindex… and returns SEO issues
 > *sorted by severity* so your agent fixes the urgent stuff first. Bare/garbled URLs
 > are rejected up front with a corrected suggestion instead of a misleading "site
-> is down". Small, tested, documented — the kind of OSS I wish more tools were.
-> github.com/AI-product-hao/globe-lens-mcp
+> is down", and batch audits can skip the robots/sitemap probes to avoid
+> rate-limiting the host. Small, tested, documented — the kind of OSS I wish more
+> tools were. github.com/AI-product-hao/globe-lens-mcp
 
 ### Reddit — r/selfhosted or r/dotnet / r/SideProject
 
