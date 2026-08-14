@@ -360,3 +360,12 @@
 - **测试结果**：`pytest -q` → 108 passed。
 - **对 Codex for OSS 申请的贡献（Day 33）**：持续活跃进入第 33 天（满一个月 + 3 天）。本次属于「让工具在真实工作流里更好用」这一类——批量审计是 agent 用户最自然的用法之一，而 3 倍请求量会真实卡住它；把探测做成可关，是对**真实使用场景**的直接回应，且完全向后兼容（默认不破任何既有调用）。延续一贯克制：跳过时字段回落为 `null` 而非假阴性，绝不误导。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25/D29/D32、工具参数 D2/D17/D24/D33、健壮/边界修复 D4/D6/D13/D15/D19/D21/D23/D26/D28/D31、严重级别/文案 D7/D16、错误处理 D9/D30、测试覆盖 D11/D27），无连续同类、无破坏性变更、无新依赖——连续 33 天真实提交，「长期在维护 + 能力持续变厚 + 会自我纠错 + 文档讲清真实用法」的证据链持续加长。
 - **下一步（Day 34）候选（避开「工具可选参数」，上次是 D33）**：① 测试覆盖（上次 D27，间隔 6 天）；② 改进 Issue 文案/输出可用性（上次 D16，间隔 17 天）；③ README 真实示例增强延续（如「真实站点审计前后对比」/ Cursor·Claude Code 接入 GIF 或步骤）；④ 边界 bug 修复（上次 D31，间隔 2 天，可放宽）；⑤ 新增审计维度（上次 D32，间隔 1 天，可放宽，避开已覆盖项）。暂无已知 latent bug。
+
+## Day 34 — 2026-08-14（持续维护，Day 33 之后的第 1 天）
+- **改动类型：新增审计维度（与 Day 33「工具可选参数」不同类；上次同类是 D32，间隔 1 天，因与 D33 不同类、满足「不连续两次做同一类」规则，且候选清单明确「可放宽」）**。重复 `<meta name="description">` 是 CMS / SEO 插件最常见的注入类 bug：主题、插件、手写的 description 各一份，搜索引擎**任取其一**，于是你精调的 SERP 摘要可能永远不出现。此前 GlobeLens 只取第一个 description、对重复全然无感。
+  - `analyzer.py`：`AuditReport` 新增 `meta_description_count: int = 0`；meta description 区块由 `.find()` 改为 `.find_all()` 统计条数，取**首个非空**声明作为权威 description（保持既有 short/long 逻辑不变）；`count > 1` 时发 `desc_duplicate`（warning：搜索引擎任取其一，应保留唯一权威标签）。`FIX_HINTS` 补 `desc_duplicate`（源码锁表测试自动覆盖）。零新依赖、良构单 description 页面行为不变。
+- **测试**：`tests/test_analyzer.py` 新增 2 例——`test_flags_duplicate_meta_description`（2 个 description → `desc_duplicate` 命中、`meta_description_count==2`、首个非空仍被记录、不发 `desc_missing`）、`test_single_meta_description_not_flagged`（SAMPLE_GOOD 单 description → 不误报、count==1）；pytest 108 → 110 passed，零回归（SAMPLE_GOOD 仍 `score>=90`）。
+- **文档**：README Features 补「duplicate `meta description` detection」条目；`SUMMARY.md` 增量更新（顶部 34+ day 注 + Day 34 表行 + 维度清单/价值陈述未改措辞）。
+- **测试结果**：`pytest -q` → 110 passed（81s）。
+- **对 Codex for OSS 申请的贡献（Day 34）**：连续活跃进入第 34 天（满一个月 + 4 天）。本次属于「新增真实有用的审计维度」——重复 meta description 是 indie 站主（WordPress/插件栈）高频踩坑，且直接关乎「你写的摘要能否出现在搜索结果里」，是 AI agent 在帮人建站时**真正会用到**的检查点。延续克制与自纠错范式：取首个非空声明而非崩溃、源码锁表测试保证未来加维度不忘配 fix 提示。类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25/D29/D32/D34、工具参数 D2/D17/D24/D33、健壮/边界修复 D4/D6/D13/D15/D19/D21/D23/D26/D28/D31、严重级别/文案 D7/D16、错误处理 D9/D30、测试覆盖 D11/D27），无连续同类、无破坏性变更、无新依赖——连续 34 天真实提交，「长期在维护 + 能力持续变厚 + 会自我纠错 + 文档讲清真实用法」的证据链持续加长。
+- **下一步（Day 35）候选（避开「新增审计维度」，上次是 D34）**：① 测试覆盖（上次 D27，间隔 7 天）；② 改进 Issue 文案/输出可用性（上次 D16，间隔 18 天）；③ README 真实示例增强延续（如「真实站点审计前后对比」/ Cursor·Claude Code 接入步骤）；④ 边界 bug 修复（上次 D31，间隔 3 天，可放宽）；⑤ 工具可选参数（上次 D33，间隔 1 天，可放宽）。暂无已知 latent bug。

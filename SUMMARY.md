@@ -236,6 +236,15 @@
 > (108 tests passing). The favicon presence detection (Day 32) reads the `<head>`
 > for any conventional icon rel and, when none is declared, reports
 > `favicon_missing` (info) with a concrete `fix` hint.
+>
+> **Updated 2026-08-14 (Day 34):** the streak is now 34+ days. The analyzer gained
+> **duplicate `meta description` detection** — when a page declares more than one
+> `<meta name="description">` (a classic CMS / SEO-plugin injection bug), search
+> engines use one *arbitrarily*, so the carefully tuned SERP snippet may never
+> appear. GlobeLens now reports this as `desc_duplicate` (warning) with a new
+> `meta_description_count` field and a concrete `fix` hint, fully unit-tested
+> (110 tests passing). The day-class rotation continues to avoid repeats
+> (Day 33 was a tool option, Day 34 is a new audit dimension).
 
 ---
 
@@ -382,6 +391,7 @@ first.
 | 31 | 2026-08-11 | coverage fix | mixed-content detection now also scans `srcset` on `<img>`/`<source>` (responsive-image sources were previously invisible); README adds the project's first concrete real-world walkthrough | **105 passed** |
 | 32 | 2026-08-12 | new audit dim | favicon presence detection (`favicon_missing` info when no `<link rel="icon">`/shortcut icon/apple-touch-icon/… is declared); pure HTML, network-free, tested | **107 passed** |
 | 33 | 2026-08-13 | tool options | `audit_url` gains `probe_robots_sitemap` (default `true`) to skip the two extra robots.txt / sitemap.xml requests when batch-auditing — avoids 3x request volume / host rate-limiting; fields fall back to `null` when off; backward-compatible | **108 passed** |
+| 34 | 2026-08-14 | new audit dim | duplicate `meta description` detection (`desc_duplicate` warning when >1 `<meta name="description">` tag; CMS/plugin injection makes search engines pick one arbitrarily; `meta_description_count` field + `fix` hint; pure HTML, network-free, tested) | **110 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped

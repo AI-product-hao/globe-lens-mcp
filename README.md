@@ -31,7 +31,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   has no spaces, so it is measured by character count instead of being scored
   as a single word), **favicon presence** (a missing `<link rel="icon">` is
   flagged as a cheap brand-recognition fix for tabs, bookmarks and search
-  results), **conflicting `canonical` detection** (multiple
+  results), **duplicate `meta description` detection** (more than one
+  `<meta name="description">` tag — CMS/plugin injection makes search engines
+  pick one arbitrarily, so your tuned snippet may never show), **conflicting
+  `canonical` detection** (multiple
   `rel="canonical"` links pointing to *different* URLs — which makes search
   engines ignore the canonical signal entirely; duplicate links resolving to the
   same address are not flagged), **`meta refresh` detection**
