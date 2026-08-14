@@ -96,6 +96,7 @@ FIX_HINTS: dict[str, str] = {
     "desc_missing": 'Add <meta name="description" content="..."> with a 70-160 character summary.',
     "desc_short": "Expand the meta description to 70-160 characters to improve snippet quality.",
     "desc_long": "Trim the meta description to 160 characters or less to avoid SERP truncation.",
+    "desc_duplicate": 'Keep exactly one <meta name="description">; remove the duplicates injected by plugins/CMS so search engines use your chosen snippet.',
     "lang_missing": 'Add a lang attribute to the root element, e.g. <html lang="en">.',
     "lang_invalid": "Replace the <html lang> value with a BCP 47 tag: language, optional script/region joined by hyphens (e.g. 'en', 'en-US', 'zh-Hans').",
     "lang_hreflang_mismatch": "Make <html lang> match the language of this page's own hreflang entry (change whichever one is wrong).",
@@ -224,6 +225,10 @@ class AuditReport:
     title_length: int = 0
     meta_description: str | None = None
     meta_description_length: int = 0
+    # Number of <meta name="description"> tags found. 0 = absent, 1 = the normal
+    # case, >1 = duplicate declarations (CMS/plugin injection) that make search
+    # engines pick one arbitrarily, diluting the controlled SERP snippet.
+    meta_description_count: int = 0
     word_count: int = 0
     html_lang: str | None = None
     # None = no lang attribute (check not applicable); True/False = whether the
@@ -401,9 +406,15 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         report.issues.append(Issue("error", "title_missing", "Missing or empty <title> tag."))
 
     # --- meta description ---
-    meta_desc = soup.find("meta", attrs={"name": lambda v: v and v.lower() == "description"})
-    if meta_desc and meta_desc.get("content") and meta_desc["content"].strip():
-        report.meta_description = meta_desc["content"].strip()
+    meta_descs = soup.find_all("meta", attrs={"name": lambda v: v and v.lower() == "description"})
+    report.meta_description_count = len(meta_descs)
+    # Use the first non-empty declaration as the authoritative description.
+    meta_desc = next(
+        (m for m in meta_descs if m.get("content") and str(m["content"]).strip()),
+        None,
+    )
+    if meta_desc is not None:
+        report.meta_description = str(meta_desc["content"]).strip()
         report.meta_description_length = len(report.meta_description)
         if report.meta_description_length < 70:
             report.issues.append(Issue("warning", "desc_short", "Meta description is short (<70 chars)."))
@@ -412,6 +423,17 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                                         "Meta description exceeds 160 chars; may be truncated in SERP."))
     else:
         report.issues.append(Issue("warning", "desc_missing", "Missing meta description."))
+    # Multiple description tags are a real-world trap: a CMS, a SEO plugin and a
+    # hand-written tag each inject their own, and search engines use *one*
+    # arbitrarily (often not the one you wrote), so your carefully tuned snippet
+    # may never appear. This applies whether the duplicates are identical or
+    # contradictory — the fix is always to keep a single authoritative tag.
+    if report.meta_description_count > 1:
+        report.issues.append(Issue(
+            "warning", "desc_duplicate",
+            f"Found {report.meta_description_count} <meta name=\"description\"> tags; "
+            f"search engines use one arbitrarily, so keep a single authoritative "
+            f"description."))
 
     # --- <html lang> ---
     html_tag = soup.find("html")

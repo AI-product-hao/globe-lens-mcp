@@ -520,6 +520,35 @@ def test_flags_missing_charset():
     assert "charset_missing" in [i.code for i in r.issues]
 
 
+# --- duplicate <meta name="description"> (CMS / plugin injection) ---
+# Multiple description tags make search engines pick one arbitrarily, so the
+# tuned snippet may never show. Detected as a count, regardless of identical vs
+# contradictory content.
+SAMPLE_DUP_DESC = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Duplicate Description Demo</title>
+<meta name="description" content="First description for the page, reasonably long and detailed enough.">
+<meta name="description" content="Second description that overrides the first by accident.">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_duplicate_meta_description():
+    r = analyze_html(SAMPLE_DUP_DESC, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "desc_duplicate" in codes
+    assert r.meta_description_count == 2
+    # the first non-empty declaration is still recorded as the description
+    assert r.meta_description is not None
+    assert "desc_missing" not in codes
+
+
+def test_single_meta_description_not_flagged():
+    r = analyze_html(SAMPLE_GOOD, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "desc_duplicate" not in codes
+    assert r.meta_description_count == 1
+
+
 # --- hreflang value validity (i18n) ---
 # Malformed hreflang codes are one of the most common real i18n mistakes and
 # are silently ignored by search engines, so the intended alternate is lost.
