@@ -235,6 +235,52 @@ def test_check_i18n_respects_custom_max_bytes():
     assert result["html_lang"] == "en"
 
 
+def test_success_response_includes_ok_and_error_count():
+    # Success responses must carry `ok: true` (mirroring the `ok: false` that
+    # error paths already return) plus an `error_count`, so a script/CI gate
+    # can branch on `ok` and fail on hard errors in a single, uniform way.
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, text=SAMPLE)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        res_audit = asyncio.run(server.audit_url("https://example.com"))
+        res_i18n = asyncio.run(server.check_i18n("https://example.com"))
+        res_probe = asyncio.run(server.check_robots_sitemap("https://example.com"))
+
+    assert res_audit["ok"] is True
+    assert res_i18n["ok"] is True
+    assert res_probe["ok"] is True
+    # SAMPLE declares a valid <html lang="en"> and no broken title, so it has
+    # zero error-severity issues; the counts must reflect that exactly.
+    assert res_audit["error_count"] == 0
+    assert res_i18n["error_count"] == 0
+    # error_count is a non-negative integer on every success path
+    assert isinstance(res_audit["error_count"], int) and res_audit["error_count"] >= 0
+
+
+def test_audit_url_error_count_counts_error_issues():
+    # A page with no <html lang> raises lang_missing (an error), so error_count
+    # must be >= 1 — proving the field tracks real hard failures rather than a
+    # constant 0 that would make a CI gate useless.
+    bad = '<html><head><title>x</title></head><body></body></html>'
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, text=bad)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com"))
+
+    assert result["ok"] is True
+    assert result["error_count"] >= 1
+    assert any(i["severity"] == "error" for i in result["issues"])
+
+
 def test_audit_url_returns_structured_error_on_404():
     # A 404 (or any non-2xx) must become a parseable error dict, not an
     # unhandled exception that loses the whole tool call for the agent.

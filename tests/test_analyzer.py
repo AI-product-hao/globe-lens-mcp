@@ -1269,8 +1269,7 @@ def test_flags_several_languages_claiming_the_same_url():
     assert r.hreflang_conflicts == []
 
 
-def test_clean_hreflang_cluster_reports_no_conflict():
-    # Same code repeated with an equivalent URL ("/de" vs "/de/") is a harmless
+def test_clean_hreflang_cluster_reports_no_conflict():    # Same code repeated with an equivalent URL ("/de" vs "/de/") is a harmless
     # duplicate declaration, not a contradiction; SAMPLE_GOOD must stay clean.
     html = """<html lang="de"><head><meta charset="utf-8">
       <title>Saubere Sprachversionen Demo Seite</title>
@@ -1289,3 +1288,61 @@ def test_clean_hreflang_cluster_reports_no_conflict():
     good = analyze_html(SAMPLE_GOOD, "https://example.com")
     assert good.hreflang_conflicts == []
     assert good.hreflang_duplicate_urls == []
+
+
+# --- the headline usage loop: audit -> fix -> re-audit raises the score ---
+# This is the exact workflow the README "Real-world walkthrough" promises
+# ("Re-running audit_url then shows score climbing as each fix lands"). It is
+# asserted directly so a refactor that changed the penalty model, the issue
+# grouping, or the fix hints could not silently break the loop without a test
+# turning red.
+def test_reaudit_after_fixing_issues_raises_score():
+    # A realistic marketing page with a handful of distinct, fixable problems.
+    page = (
+        '<!doctype html>\n<html lang="en"><head>\n'
+        '<meta charset="utf-8">\n'
+        '<title>Acme — Global SaaS for teams</title>\n'
+        '<meta name="description" content="Too short.">\n'
+        '</head><body><h1>Welcome to Acme</h1>'
+        '<p>' + _SENTENCE * 40 + '</p></body></html>'
+    )
+    before = analyze_html(page, "https://example.com")
+    before_codes = {i.code for i in before.issues}
+    assert "viewport_missing" in before_codes
+    assert "favicon_missing" in before_codes
+    assert "desc_short" in before_codes
+
+    # "Fix" the page: real viewport + favicon + OG + JSON-LD, and a properly
+    # sized meta description. Each fix removes exactly its own issue.
+    fixed = page
+    fixed = fixed.replace(
+        '<title>Acme — Global SaaS for teams</title>\n',
+        '<title>Acme — Global SaaS for teams</title>\n'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">\n'
+        '<link rel="icon" href="/favicon.ico">\n',
+    )
+    fixed = fixed.replace(
+        '<meta name="description" content="Too short.">',
+        '<meta name="description" content="Acme helps distributed teams ship '
+        'global products faster with built-in localization, analytics and a '
+        'delightful onboarding experience.">',
+    )
+    fixed = fixed.replace(
+        '</head><body><h1>Welcome to Acme</h1>',
+        '<meta property="og:title" content="Acme">\n'
+        '<meta property="og:description" content="Acme for teams">\n'
+        '<script type="application/ld+json">{"@type":"WebSite"}</script>\n'
+        '</head><body><h1>Welcome to Acme</h1>',
+    )
+
+    after = analyze_html(fixed, "https://example.com")
+    after_codes = {i.code for i in after.issues}
+    # every fix lands: the targeted issues are gone (only the constant
+    # hreflang_missing remains, which we never touched)
+    assert "viewport_missing" not in after_codes
+    assert "favicon_missing" not in after_codes
+    assert "desc_short" not in after_codes
+    assert "og_missing" not in after_codes
+    assert "json_ld_missing" not in after_codes
+    # and the documented loop actually moves the needle
+    assert after.score > before.score

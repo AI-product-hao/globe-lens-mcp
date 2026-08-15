@@ -264,7 +264,9 @@ async def audit_url(
     Checks title, meta description, html lang, hreflang alternates, OG/Twitter
     cards, canonical, viewport, charset, H1 structure, image alt coverage,
     meta refresh redirects, plus robots.txt / sitemap.xml presence. Returns a
-    structured report with a 0-100 score and prioritized issues.
+    structured report with a 0-100 score and prioritized issues. Every response
+    carries `ok` (true on success) and `error_count` (the number of
+    error-severity issues) so a pipeline can gate on hard failures in one branch.
 
     Redirects are followed by default; the report is computed against the final
     URL and includes final_url / redirected fields so the agent knows exactly
@@ -367,6 +369,15 @@ async def audit_url(
         out["final_url"] = final_url
         out["redirected"] = redirected
         out["followed_redirects"] = follow_redirects
+        # Uniform success flag: error paths already return `ok: false` (see
+        # _http_error_result / _invalid_url_result), so a caller can branch on
+        # `ok` exactly once for both outcomes instead of sniffing for fields.
+        # `error_count` lets a pipeline gate on *error*-severity issues only,
+        # ignoring the cosmetic info/warning noise.
+        out["ok"] = True
+        out["error_count"] = sum(
+            1 for i in report.issues if i.severity == "error"
+        )
         return out
 
 
@@ -384,7 +395,10 @@ async def check_i18n(
     Covers: `<html lang>` presence *and* BCP 47 validity, hreflang alternates
     (value validity, x-default, self-reference, and cluster integrity — one
     code pointing at several URLs, or several codes claiming one URL), and
-    whether `<html lang>` agrees with the page's own hreflang entry.
+    whether `<html lang>` agrees with the page's own hreflang entry. The
+    response carries `ok` (true on success) and `error_count` (error-severity
+    i18n issues only), so a CI gate can fail on an invalid/missing `lang`
+    without the full-page score diluting it with unrelated info warnings.
 
     Args:
         url: The page to check.
@@ -446,6 +460,11 @@ async def check_i18n(
             "final_url": final_url,
             "redirected": redirected,
             "followed_redirects": follow_redirects,
+            "ok": True,
+            # error-severity count over the *filtered* i18n issues, so a CI gate
+            # can fail on e.g. an invalid `lang` / missing `lang` without the
+            # full-page score dragging it down with unrelated info warnings.
+            "error_count": sum(1 for i in issues if i["severity"] == "error"),
             "html_lang": report.html_lang,
             "lang_valid": report.lang_valid,
             "lang_hreflang_mismatch": report.lang_hreflang_mismatch,
@@ -499,7 +518,10 @@ async def check_robots_sitemap(
         verify=verify_ssl,
     ) as client:
         robots_url, sitemap_url = robots_sitemap_urls(url)
-        out: dict[str, Any] = {}
+        # The call completed (any probe failure is reported as found: null,
+        # not an exception), so a uniform `ok: true` keeps the success/failure
+        # contract symmetric with the error paths above.
+        out: dict[str, Any] = {"ok": True}
         try:
             r = await client.get(robots_url)
             out["robots_txt"] = {
