@@ -210,6 +210,32 @@ fixes the two `warning`s first (add the self-referencing `es` link + an
 **audit → fix the highest-priority issue → re-audit** — is exactly the
 real usage scenario GlobeLens is built for.
 
+## Audit in CI / pre-merge
+
+Because every response carries an `ok` flag and an `error_count` (the number
+of `error`-severity issues), GlobeLens drops straight into a pipeline: point it
+at a preview / staging URL and **block the merge when an error-severity issue
+appears** — no human has to read the report first.
+
+> "Before merging any change that touches our marketing pages, run `audit_url`
+> on the preview URL. If `ok` is false or `error_count > 0`, fail the check and
+> tell me which issues to fix."
+
+A minimal gate (pseudo-code):
+
+```python
+res = await audit_url(preview_url)
+if not res["ok"] or res["error_count"] > 0:
+    raise SystemExit(f"SEO/i18n gate failed: {res['error_count']} error(s)")
+```
+
+Because every issue also carries a `priority` and a copy-paste `fix`, the agent
+can both **enforce** the gate *and* **apply** the fix in the same run — the
+audit → fix → re-audit loop above, automated. `check_i18n` exposes the same
+`ok` / `error_count` over its filtered i18n issues, so a localization gate can
+fail on an invalid or missing `<html lang>` without the full-page score
+diluting it with unrelated info warnings.
+
 ## Tool options
 
 Every tool accepts optional request controls — handy for staging/preview sites

@@ -246,6 +246,15 @@
 > (110 tests passing). The day-class rotation continues to avoid repeats
 > (Day 33 was a tool option, Day 34 is a new audit dimension).
 
+> **Updated 2026-08-15 (Day 35):** the streak is now 35+ days — and the focus
+> shifted to **output usability + a real usage scenario**. Every success response
+> now carries a uniform `ok: true` flag (mirroring the `ok: false` that error
+> paths already return) plus an `error_count` (the number of error-severity
+> issues; for `check_i18n` over its filtered i18n issues), so the tools drop
+> straight into a CI / pre-merge gate (`if not ok or error_count > 0: fail`).
+> The README adds a matching "Audit in CI / pre-merge" walkthrough. Both changes
+> are backward-compatible and fully tested (113 tests passing).
+
 ---
 
 ## 1. What GlobeLens is
@@ -281,6 +290,13 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
 destination) and `probe_robots_sitemap` (default `true`; set `false` to skip the two
 robots.txt / sitemap.xml requests when batch-auditing, leaving `has_robots_txt` /
 `has_sitemap` as `null`).
+
+Every response carries an `ok` flag (`true` on success, `false` on an
+unreachable/unfetchable URL with a structured `error` + `suggestion`) so a caller
+branches on `ok` exactly once, and `audit_url` / `check_i18n` also return
+`error_count` (the number of error-severity issues — for `check_i18n` over its
+filtered i18n issues) so a CI gate can fail on hard failures without the info/
+warning noise diluting the score.
 
 ---
 
@@ -392,6 +408,7 @@ first.
 | 32 | 2026-08-12 | new audit dim | favicon presence detection (`favicon_missing` info when no `<link rel="icon">`/shortcut icon/apple-touch-icon/… is declared); pure HTML, network-free, tested | **107 passed** |
 | 33 | 2026-08-13 | tool options | `audit_url` gains `probe_robots_sitemap` (default `true`) to skip the two extra robots.txt / sitemap.xml requests when batch-auditing — avoids 3x request volume / host rate-limiting; fields fall back to `null` when off; backward-compatible | **108 passed** |
 | 34 | 2026-08-14 | new audit dim | duplicate `meta description` detection (`desc_duplicate` warning when >1 `<meta name="description">` tag; CMS/plugin injection makes search engines pick one arbitrarily; `meta_description_count` field + `fix` hint; pure HTML, network-free, tested) | **110 passed** |
+| 35 | 2026-08-15 | output usability + docs | every success response now returns a uniform `ok: true` flag + `error_count` (error-severity issue count; `check_i18n` over filtered i18n issues) for CI/pre-merge gating; README adds an "Audit in CI / pre-merge" real-usage scenario; 3 new tests lock the `ok`/`error_count` contract and the audit→fix→re-audit score-climb loop | **113 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -409,7 +426,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 33+ day streak of tested, documented, backward-compatible
+> project with a continuous 35+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -439,15 +456,16 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 33 days, 33+ real commits, 108 passing tests. GlobeLens now validates hreflang
+> 35+ days, 35+ real commits, 113 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
-> unsafe target="_blank" links, missing favicons, noindex… and returns SEO issues
-> *sorted by severity* so your agent fixes the urgent stuff first. Bare/garbled URLs
-> are rejected up front with a corrected suggestion instead of a misleading "site
-> is down", and batch audits can skip the robots/sitemap probes to avoid
-> rate-limiting the host. Small, tested, documented — the kind of OSS I wish more
-> tools were. github.com/AI-product-hao/globe-lens-mcp
+> unsafe target="_blank" links, missing favicons, noindex, duplicate meta
+> descriptions… and returns SEO issues *sorted by severity* so your agent fixes
+> the urgent stuff first. Every response carries `ok` + `error_count`, so it drops
+> straight into a CI/pre-merge gate. Bare/garbled URLs are rejected up front with a
+> corrected suggestion instead of a misleading "site is down", and batch audits can
+> skip the robots/sitemap probes to avoid rate-limiting the host. Small, tested,
+> documented — the kind of OSS I wish more tools were. github.com/AI-product-hao/globe-lens-mcp
 
 ### Reddit — r/selfhosted or r/dotnet / r/SideProject
 
