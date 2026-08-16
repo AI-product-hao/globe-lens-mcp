@@ -255,6 +255,16 @@
 > The README adds a matching "Audit in CI / pre-merge" walkthrough. Both changes
 > are backward-compatible and fully tested (113 tests passing).
 
+> **Updated 2026-08-16 (Day 36):** the streak is now 36+ days — and the **viewport**
+> audit gained a real accessibility dimension: **zoom-locked viewport detection**.
+> A viewport meta can be present yet still trap low-vision users at 100% via
+> `user-scalable=no` or `maximum-scale<=1` — a genuine WCAG 2.5.1 failure that is
+> extremely common on real mobile sites. GlobeLens now flags it as
+> `viewport_zoom_disabled` (`warning`) with a concrete `fix` hint, while leaving
+> ordinary `initial-scale=1` pages and `maximum-scale>1` (which still allows
+> 200%+ zoom) alone — precise, no false positives. New field `viewport_zoom_disabled`
+> and two new tests; 115 tests passing.
+
 ---
 
 ## 1. What GlobeLens is
@@ -307,7 +317,7 @@ warning noise diluting the score.
 - **`<html lang>`** — missing (error; critical for i18n).
 - **Charset** — declared or not; accepts both the HTML5 `<meta charset>` and the
   legacy `<meta http-equiv="Content-Type" content="…; charset=…">` form.
-- **Viewport** — present or not (mobile friendliness).
+- **Viewport** — present or not (mobile friendliness); **zoom-locked viewport** detection (`user-scalable=no` / `maximum-scale<=1` flagged as `viewport_zoom_disabled`, a WCAG 2.5.1 failure that traps low-vision users at 100%; `maximum-scale>1` and plain `initial-scale=1` are correctly left alone).
 - **Canonical** — captured verbatim **and** resolved to an absolute `canonical_url`; **conflicting `canonical` links** (two or more `<link rel="canonical">` pointing to *different* URLs) are flagged as `canonical_conflict` (search engines then ignore the canonical signal), while duplicates resolving to the same address are not.
 - **hreflang** — captured with each entry resolved to an absolute `abs_href`;
   warns when no `x-default`, and **validates each hreflang value's format**
@@ -409,6 +419,7 @@ first.
 | 33 | 2026-08-13 | tool options | `audit_url` gains `probe_robots_sitemap` (default `true`) to skip the two extra robots.txt / sitemap.xml requests when batch-auditing — avoids 3x request volume / host rate-limiting; fields fall back to `null` when off; backward-compatible | **108 passed** |
 | 34 | 2026-08-14 | new audit dim | duplicate `meta description` detection (`desc_duplicate` warning when >1 `<meta name="description">` tag; CMS/plugin injection makes search engines pick one arbitrarily; `meta_description_count` field + `fix` hint; pure HTML, network-free, tested) | **110 passed** |
 | 35 | 2026-08-15 | output usability + docs | every success response now returns a uniform `ok: true` flag + `error_count` (error-severity issue count; `check_i18n` over filtered i18n issues) for CI/pre-merge gating; README adds an "Audit in CI / pre-merge" real-usage scenario; 3 new tests lock the `ok`/`error_count` contract and the audit→fix→re-audit score-climb loop | **113 passed** |
+| 36 | 2026-08-16 | new audit dim | zoom-locked viewport detection (`user-scalable=no` / `maximum-scale<=1` → `viewport_zoom_disabled`, a WCAG 2.5.1 failure that traps low-vision users at 100%); `maximum-scale>1` and plain `initial-scale=1` correctly left alone; new `viewport_zoom_disabled` field + 2 tests | **115 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -426,7 +437,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 35+ day streak of tested, documented, backward-compatible
+> project with a continuous 36+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -456,15 +467,16 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 35+ days, 35+ real commits, 113 passing tests. GlobeLens now validates hreflang
+> 36+ days, 36+ real commits, 115 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, missing favicons, noindex, duplicate meta
-> descriptions… and returns SEO issues *sorted by severity* so your agent fixes
-> the urgent stuff first. Every response carries `ok` + `error_count`, so it drops
-> straight into a CI/pre-merge gate. Bare/garbled URLs are rejected up front with a
-> corrected suggestion instead of a misleading "site is down", and batch audits can
-> skip the robots/sitemap probes to avoid rate-limiting the host. Small, tested,
+> descriptions, duplicate canonical, zoom-locked viewports… and returns SEO
+> issues *sorted by severity* so your agent fixes the urgent stuff first. Every
+> response carries `ok` + `error_count`, so it drops straight into a CI/pre-merge
+> gate. Bare/garbled URLs are rejected up front with a corrected suggestion
+> instead of a misleading "site is down", and batch audits can skip the
+> robots/sitemap probes to avoid rate-limiting the host. Small, tested,
 > documented — the kind of OSS I wish more tools were. github.com/AI-product-hao/globe-lens-mcp
 
 ### Reddit — r/selfhosted or r/dotnet / r/SideProject
