@@ -102,6 +102,7 @@ FIX_HINTS: dict[str, str] = {
     "lang_hreflang_mismatch": "Make <html lang> match the language of this page's own hreflang entry (change whichever one is wrong).",
     "charset_missing": 'Add <meta charset="utf-8"> as the first element inside <head>.',
     "viewport_missing": 'Add <meta name="viewport" content="width=device-width, initial-scale=1"> for mobile rendering.',
+    "viewport_zoom_disabled": 'Remove user-scalable="no" and any maximum-scale<=1 from the viewport meta (e.g. width=device-width, initial-scale=1) so low-vision users can zoom the page.',
     "hreflang_missing": 'Add <link rel="alternate" hreflang="..." href="..."> for each language/region version of this page.',
     "hreflang_no_default": 'Add <link rel="alternate" hreflang="x-default" href="..."> pointing to the fallback version.',
     "hreflang_invalid": "Replace each invalid value with an ISO 639-1 language code, optionally plus a region (e.g. 'en', 'en-US'), or 'x-default'.",
@@ -240,6 +241,11 @@ class AuditReport:
     lang_hreflang_mismatch: bool | None = None
     charset: str | None = None
     viewport: bool = False
+    # False = viewport present without disabling zoom; True = the viewport
+    # meta locks user zoom (user-scalable=no / maximum-scale<=1), a WCAG 2.5.1
+    # failure that traps low-vision users at 100% (None is never used: when the
+    # viewport is absent we raise viewport_missing instead and leave this False).
+    viewport_zoom_disabled: bool = False
     h1_count: int = 0
     images_total: int = 0
     images_missing_alt: int = 0
@@ -482,6 +488,39 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     if not report.viewport:
         report.issues.append(Issue("warning", "viewport_missing",
                                     "Missing viewport meta tag (mobile unfriendly)."))
+    else:
+        # Even with a viewport present, it can *lock* zoom for users — a real
+        # WCAG 2.5.1 (Pointer Targets / Resize Text) failure that traps
+        # low-vision users at 100%. Two ways it happens in the wild:
+        #   - user-scalable=no (or =0)        -> explicit opt-out of zoom
+        #   - maximum-scale=1 / 1.0 / 0.8 …   -> caps zoom at 100% (<=1.0)
+        # We deliberately do NOT flag initial-scale, and we only flag a
+        # maximum-scale that actually prevents zoom (<= 1.0), so a
+        # `maximum-scale=2` (still allows 200% zoom) is correctly left alone —
+        # keeps GlobeLens precise and free of false positives.
+        vp_content = (vp.get("content") or "").lower()
+        vp_pairs = {}
+        for part in vp_content.split(","):
+            if "=" in part:
+                k, _, v = part.partition("=")
+                vp_pairs[k.strip()] = v.strip()
+        zoom_locked = False
+        scale = vp_pairs.get("maximum-scale")
+        if scale:
+            try:
+                if float(scale) <= 1.0:
+                    zoom_locked = True
+            except ValueError:
+                pass  # non-numeric maximum-scale is malformed; don't guess
+        if vp_pairs.get("user-scalable") in ("no", "0"):
+            zoom_locked = True
+        if zoom_locked:
+            report.viewport_zoom_disabled = True
+            report.issues.append(Issue(
+                "warning", "viewport_zoom_disabled",
+                "Viewport disables user zoom (user-scalable=no or "
+                "maximum-scale<=1); low-vision users cannot enlarge the page "
+                "(WCAG 2.5.1)."))
 
     # --- canonical / hreflang / og / twitter ---
     canonical_hrefs: list[str] = []

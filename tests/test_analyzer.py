@@ -623,6 +623,55 @@ def test_still_flags_charset_missing_when_neither_form_present():
     assert "charset_missing" in [i.code for i in r.issues]
 
 
+# --- disabled-zoom viewport (WCAG 2.5.1) ---
+# A viewport meta can be present yet still lock zoom for low-vision users via
+# `user-scalable=no` or `maximum-scale<=1`. That is a genuine accessibility
+# failure (users are trapped at 100%), and it is extremely common on real
+# mobile sites, so GlobeLens surfaces it separately from the mere absence of a
+# viewport tag.
+SAMPLE_ZOOM_LOCKED = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Zoom Locked Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_ZOOM_OK = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Zoom Allowed Demo</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_viewport_that_disables_zoom():
+    # both user-scalable=no and maximum-scale=1 lock zoom -> flagged once
+    r = analyze_html(SAMPLE_ZOOM_LOCKED, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "viewport_zoom_disabled" in codes
+    assert r.viewport is True  # the tag IS present; this is not viewport_missing
+    assert "viewport_missing" not in codes
+    issue = next(i for i in r.issues if i.code == "viewport_zoom_disabled")
+    assert issue.fix and "maximum-scale" in issue.fix.lower()
+
+
+def test_accepts_viewport_that_allows_zoom():
+    # maximum-scale=5 still permits 200%+ zoom, so it is NOT a failure; and the
+    # ordinary "initial-scale=1" form (no zoom cap) must never be flagged.
+    r = analyze_html(SAMPLE_ZOOM_OK, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "viewport_zoom_disabled" not in codes
+    assert "viewport_missing" not in codes
+    assert r.viewport_zoom_disabled is False
+
+    plain = analyze_html(
+        '<html lang="en"><head><meta charset="utf-8">'
+        '<title>Plain Viewport Demo</title>'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '</head><body><h1>Hi</h1></body></html>',
+        "https://example.com",
+    )
+    assert "viewport_zoom_disabled" not in [i.code for i in plain.issues]
+
+
 # --- self-referencing hreflang (i18n) ---
 # Google requires every page in an hreflang cluster to also list *itself* as an
 # alternate. A missing self-reference can make search engines ignore the whole
