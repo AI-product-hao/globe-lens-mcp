@@ -17,7 +17,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
 ## Features
 
 - 🔍 **Full audit** (`audit_url`): title, meta description, `lang`, `hreflang`,
-  canonical, viewport, charset, Open Graph / Twitter cards, **H1 structure**
+  canonical, viewport (including a **zoom-locked viewport** check —
+  `user-scalable=no` / `maximum-scale<=1` is a WCAG 2.5.1 failure that traps
+  low-vision users at 100%), charset, Open Graph / Twitter cards, **H1 structure**
   (missing / multiple), **image `alt` text coverage**, **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**
   (insecure `http://` subresources on HTTPS pages — including `srcset`
