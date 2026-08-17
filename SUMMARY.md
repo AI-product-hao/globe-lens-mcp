@@ -265,6 +265,17 @@
 > 200%+ zoom) alone — precise, no false positives. New field `viewport_zoom_disabled`
 > and two new tests; 115 tests passing.
 
+> **Updated 2026-08-17 (Day 37):** the streak is now 37+ days — and today's work is
+> **test-coverage hardening** (a different category from yesterday's new audit
+> dimension, keeping the rotation healthy). Three real warning paths that were
+> shipped and working but had *no* dedicated regression test —
+> `hreflang_no_default` (international site missing its x-default), `title_long`
+> (title > 60 chars), and `desc_long` (meta description > 160 chars) — are now
+> pinned by four new tests (including the inverse "x-default present ⇒ no
+> warning" guard). Pure test additions, zero functional change, zero regressions;
+> 119 tests passing. This is exactly the kind of sustained, verifiable maintenance
+> that shows the project is actively cared for, not a one-week burst.
+
 ---
 
 ## 1. What GlobeLens is
@@ -420,6 +431,7 @@ first.
 | 34 | 2026-08-14 | new audit dim | duplicate `meta description` detection (`desc_duplicate` warning when >1 `<meta name="description">` tag; CMS/plugin injection makes search engines pick one arbitrarily; `meta_description_count` field + `fix` hint; pure HTML, network-free, tested) | **110 passed** |
 | 35 | 2026-08-15 | output usability + docs | every success response now returns a uniform `ok: true` flag + `error_count` (error-severity issue count; `check_i18n` over filtered i18n issues) for CI/pre-merge gating; README adds an "Audit in CI / pre-merge" real-usage scenario; 3 new tests lock the `ok`/`error_count` contract and the audit→fix→re-audit score-climb loop | **113 passed** |
 | 36 | 2026-08-16 | new audit dim | zoom-locked viewport detection (`user-scalable=no` / `maximum-scale<=1` → `viewport_zoom_disabled`, a WCAG 2.5.1 failure that traps low-vision users at 100%); `maximum-scale>1` and plain `initial-scale=1` correctly left alone; new `viewport_zoom_disabled` field + 2 tests | **115 passed** |
+| 37 | 2026-08-17 | test coverage | pin three real warning paths that had no dedicated test — `hreflang_no_default` (international site missing its x-default), `title_long` (>60 chars), `desc_long` (>160 chars) — with 4 new tests incl. the inverse "x-default present ⇒ no warning" guard; zero functional change | **119 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
