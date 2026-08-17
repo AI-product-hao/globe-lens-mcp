@@ -1395,3 +1395,85 @@ def test_reaudit_after_fixing_issues_raises_score():
     assert "json_ld_missing" not in after_codes
     # and the documented loop actually moves the needle
     assert after.score > before.score
+
+
+# --- Regression coverage for warning paths that previously had no direct test.
+# `hreflang_no_default`, `title_long` and `desc_long` are real, agent-visible
+# warnings emitted on very common pages (a multi-region site that forgot its
+# x-default, a wordy CMS title, a pasted-in long meta description). They were
+# shipped and working but never pinned by a test, so a future refactor could
+# silently drop them and an agent would stop warning about a real SEO defect.
+
+
+def test_flags_missing_x_default_hreflang():
+    # A correct hreflang cluster with a self-reference but no x-default.
+    # Google recommends an x-default fallback for international sites, so the
+    # warning must fire — and the *other* hreflang warnings must stay quiet
+    # (the cluster itself is well-formed).
+    page = (
+        '<!doctype html><html lang="en"><head>\n'
+        '<title>International site</title>\n'
+        '<meta name="description" content="Some description text for the page.">\n'
+        '<link rel="canonical" href="https://example.com/en">\n'
+        '<link rel="alternate" hreflang="en" href="https://example.com/en">\n'
+        '<link rel="alternate" hreflang="de" href="https://example.com/de">\n'
+        '</head><body><h1>Hi</h1><img alt="x" src="/a.png"></body></html>'
+    )
+    r = analyze_html(page, "https://example.com/en")
+    codes = {i.code for i in r.issues}
+    assert "hreflang_no_default" in codes
+    # well-formed cluster: self-reference present, no spurious warnings
+    assert "hreflang_no_self_ref" not in codes
+    assert "lang_hreflang_mismatch" not in codes
+
+
+def test_does_not_flag_x_default_when_present():
+    # The inverse: with an x-default declared, the warning must NOT fire. This
+    # guards against a regressions where the check keyed on "any hreflang"
+    # (always true) instead of "x-default specifically absent".
+    page = (
+        '<!doctype html><html lang="en"><head>\n'
+        '<title>International site</title>\n'
+        '<meta name="description" content="Some description text for the page.">\n'
+        '<link rel="canonical" href="https://example.com/en">\n'
+        '<link rel="alternate" hreflang="x-default" href="https://example.com/en">\n'
+        '<link rel="alternate" hreflang="en" href="https://example.com/en">\n'
+        '<link rel="alternate" hreflang="de" href="https://example.com/de">\n'
+        '</head><body><h1>Hi</h1><img alt="x" src="/a.png"></body></html>'
+    )
+    r = analyze_html(page, "https://example.com/en")
+    assert "hreflang_no_default" not in {i.code for i in r.issues}
+
+
+def test_flags_title_longer_than_sixty_chars():
+    # Titles over 60 chars get truncated in SERPs; GlobeLens warns via
+    # `title_long`. A 70-char title must trigger it and must NOT be mistaken
+    # for the short-title warning.
+    page = (
+        '<!doctype html><html lang="en"><head>\n'
+        f"<title>{'x' * 70}</title>\n"
+        '</head><body><h1>x</h1></body></html>'
+    )
+    r = analyze_html(page, "https://example.com")
+    codes = {i.code for i in r.issues}
+    assert r.title_length == 70
+    assert "title_long" in codes
+    assert "title_short" not in codes
+
+
+def test_flags_meta_description_longer_than_160_chars():
+    # A meta description over 160 chars is cut off in search results; GlobeLens
+    # warns via `desc_long`. A 170-char description must trigger it and must NOT
+    # be mistaken for the short-description warning.
+    page = (
+        '<!doctype html><html lang="en"><head>\n'
+        '<title>Normal title</title>\n'
+        f'<meta name="description" content="{"y" * 170}">\n'
+        '</head><body><h1>x</h1></body></html>'
+    )
+    r = analyze_html(page, "https://example.com")
+    codes = {i.code for i in r.issues}
+    assert r.meta_description_length == 170
+    assert "desc_long" in codes
+    assert "desc_short" not in codes
+
