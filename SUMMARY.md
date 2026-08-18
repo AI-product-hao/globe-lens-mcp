@@ -275,6 +275,18 @@
 > warning" guard). Pure test additions, zero functional change, zero regressions;
 > 119 tests passing. This is exactly the kind of sustained, verifiable maintenance
 > that shows the project is actively cared for, not a one-week burst.
+>
+> **Updated 2026-08-18 (Day 38):** the streak is now 38+ days — and today's work is a
+> **correctness fix** (a different category from yesterday's test-coverage work,
+> keeping the rotation healthy). The README promises canonical/hreflang are
+> resolved to absolute URLs an agent can act on directly, but a page that
+> declares `<base href>` resolves every relative URL against *that* base — and
+> GlobeLens was resolving against the document URL, returning wrong absolute URLs
+> for CDN-fronted / templated sites. The fix honors `<base>` in the canonical,
+> hreflang and cross-origin `target="_blank"` resolution, with four new tests
+> (including a backward-compatibility guard). 123 tests passing. This is the
+> "does the tool actually honor what its docs promise?" kind of maintenance that
+> only a long-term caretaker does.
 
 ---
 
@@ -432,6 +444,7 @@ first.
 | 35 | 2026-08-15 | output usability + docs | every success response now returns a uniform `ok: true` flag + `error_count` (error-severity issue count; `check_i18n` over filtered i18n issues) for CI/pre-merge gating; README adds an "Audit in CI / pre-merge" real-usage scenario; 3 new tests lock the `ok`/`error_count` contract and the audit→fix→re-audit score-climb loop | **113 passed** |
 | 36 | 2026-08-16 | new audit dim | zoom-locked viewport detection (`user-scalable=no` / `maximum-scale<=1` → `viewport_zoom_disabled`, a WCAG 2.5.1 failure that traps low-vision users at 100%); `maximum-scale>1` and plain `initial-scale=1` correctly left alone; new `viewport_zoom_disabled` field + 2 tests | **115 passed** |
 | 37 | 2026-08-17 | test coverage | pin three real warning paths that had no dedicated test — `hreflang_no_default` (international site missing its x-default), `title_long` (>60 chars), `desc_long` (>160 chars) — with 4 new tests incl. the inverse "x-default present ⇒ no warning" guard; zero functional change | **119 passed** |
+| 38 | 2026-08-18 | correctness fix | honor `<base href>` when resolving relative `canonical_url`, `hreflang.abs_href` and cross-origin `target="_blank"` links (browsers resolve relative URLs against `<base>`, not the document URL — the old code returned wrong absolute URLs for CDN-fronted / templated sites, contradicting the README's "absolute URLs" promise); the page's own address and robots/sitemap probing are deliberately left on the document URL; 4 new tests incl. a backward-compat guard | **123 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -449,7 +462,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 36+ day streak of tested, documented, backward-compatible
+> project with a continuous 38+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -479,7 +492,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 36+ days, 36+ real commits, 115 passing tests. GlobeLens now validates hreflang
+> 38+ days, 38+ real commits, 123 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, missing favicons, noindex, duplicate meta
