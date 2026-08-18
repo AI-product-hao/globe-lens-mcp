@@ -76,7 +76,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   Each result carries `found` (`true` / `false` / `null` when the probe failed)
   plus the raw `status_code`.
 - 🛡️ **Robust by design**: relative `canonical` and `hreflang` links are resolved to
-  **absolute URLs** (so an agent can act on them directly), and empty / malformed
+  **absolute URLs** (so an agent can act on them directly), and a page's
+  `<base href>` is honored when resolving them — so a CDN-fronted page that
+  declares `<base href="https://cdn.example.com/sub/">` and a relative
+  `canonical` still yields the correct absolute URL instead of a wrong one;
+  empty / malformed
   HTML returns a clear `empty_html` error instead of crashing. Charset detection
   accepts **both** the HTML5 `<meta charset>` and the legacy
   `<meta http-equiv="Content-Type" content="…; charset=…">` form, so older /

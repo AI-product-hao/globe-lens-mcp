@@ -1477,3 +1477,81 @@ def test_flags_meta_description_longer_than_160_chars():
     assert "desc_long" in codes
     assert "desc_short" not in codes
 
+
+# --- <base href> resolution for relative URLs ---
+# A page may declare <base href>, after which every *relative* URL on the page
+# resolves against that base instead of the document URL (browsers do exactly
+# this). The README promises canonical/hreflang come back as absolute URLs an
+# agent can act on directly — so we must honor <base> too, or we hand back
+# wrong URLs for any page that uses one (common on CDN-fronted sites).
+SAMPLE_BASE_CANON = """<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <title>Base Href Canonical Demo</title>
+  <base href="https://cdn.example.com/sub/">
+  <link rel="canonical" href="page.html">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_base_href_resolves_relative_canonical_against_base():
+    # `page.html` must resolve against the base (https://cdn.example.com/sub/),
+    # NOT the document URL (https://example.com/). Returning
+    # https://example.com/page.html would be wrong — the browser actually
+    # fetches it via the base. The original (relative) value is still kept.
+    r = analyze_html(SAMPLE_BASE_CANON, "https://example.com/")
+    assert r.canonical == "page.html"
+    assert r.canonical_url == "https://cdn.example.com/sub/page.html"
+
+
+SAMPLE_BASE_HREFLANG = """<!doctype html>
+<html lang="en"><head>
+  <meta charset="utf-8">
+  <title>Base Hreflang Demo</title>
+  <base href="https://cdn.example.com/base/">
+  <link rel="alternate" hreflang="en" href="en/">
+  <link rel="alternate" hreflang="x-default" href="/">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_base_href_resolves_hreflang_absolute_and_self_ref():
+    # hreflang `abs_href` must resolve against <base>. Because the page's own
+    # address does NOT change with <base>, a relative self-reference that does
+    # not resolve back to the page URL is correctly flagged as missing.
+    r = analyze_html(SAMPLE_BASE_HREFLANG, "https://example.com/en/")
+    en = next(h for h in r.hreflang if h["hreflang"] == "en")
+    assert en["abs_href"] == "https://cdn.example.com/base/en/"
+    # the only self-link resolves to https://cdn.example.com/base/en/, not
+    # https://example.com/en/ -> no self-reference -> flagged
+    assert r.hreflang_self_ref is False
+    assert "hreflang_no_self_ref" in [i.code for i in r.issues]
+
+
+def test_no_base_tag_keeps_backward_canonical_resolution():
+    # Backward compatibility: a page without <base> still resolves relative
+    # canonical against the document URL exactly as before the change.
+    html = (
+        '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+        '<title>No Base Canonical Demo</title>'
+        '<link rel="canonical" href="page.html"></head>'
+        '<body><h1>Hi</h1></body></html>'
+    )
+    r = analyze_html(html, "https://example.com/section/")
+    assert r.canonical_url == "https://example.com/section/page.html"
+
+
+SAMPLE_BASE_LINK = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Base Link Demo</title>
+<base href="http://evil.example.com/"></head>
+<body>
+  <a href="phish" target="_blank">Looks relative, is cross-origin</a>
+</body></html>"""
+
+
+def test_base_href_changes_cross_origin_blank_link_resolution():
+    # Without honoring <base>, the relative `href="phish"` would resolve to
+    # https://example.com/phish (same origin) and be skipped. With the base it
+    # resolves to http://evil.example.com/phish (cross-origin) -> flagged.
+    r = analyze_html(SAMPLE_BASE_LINK, "https://example.com/")
+    assert len(r.unsafe_blank_links) == 1
+    assert r.unsafe_blank_links[0]["href"] == "phish"
+

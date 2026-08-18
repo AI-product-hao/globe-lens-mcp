@@ -522,6 +522,19 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 "maximum-scale<=1); low-vision users cannot enlarge the page "
                 "(WCAG 2.5.1)."))
 
+    # --- base href (affects how relative URLs resolve) ---
+    # A page may declare <base href="...">; when it does, every *relative*
+    # URL on the page (canonical, hreflang, …) is resolved against that base
+    # rather than the document URL. The README promises that canonical /
+    # hreflang are resolved to absolute URLs an agent can act on directly — so
+    # we must honor <base> too, or we hand back wrong absolute URLs for any
+    # page that uses one (common on CDN-fronted and templated deployments).
+    # The first <base> wins (per the HTML spec); if it is relative itself we
+    # resolve it against the document URL first. The page's own address, used
+    # for the self-referencing hreflang check, never changes because of <base>.
+    base_tag = soup.find("base", href=True)
+    base_url = urljoin(url, base_tag["href"]) if base_tag else url
+
     # --- canonical / hreflang / og / twitter ---
     canonical_hrefs: list[str] = []
     for link in soup.find_all("link"):
@@ -533,7 +546,7 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             href = link.get("href")
             entry = {"hreflang": link.get("hreflang"), "href": href}
             if href:
-                entry["abs_href"] = urljoin(url, href)
+                entry["abs_href"] = urljoin(base_url, href)
             report.hreflang.append(entry)
 
     # Multiple canonical links are a known trap: when two or more declare
@@ -545,11 +558,11 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     if canonical_hrefs:
         # Use the first non-empty declaration as the canonical link.
         report.canonical = canonical_hrefs[0]
-        report.canonical_url = urljoin(url, canonical_hrefs[0])
+        report.canonical_url = urljoin(base_url, canonical_hrefs[0])
         # De-duplicate on the resolved absolute URL to decide if they conflict.
         resolved = []
         for href in canonical_hrefs:
-            abs_href = urljoin(url, href)
+            abs_href = urljoin(base_url, href)
             if abs_href not in resolved:
                 resolved.append(abs_href)
         report.canonical_urls = resolved
@@ -917,7 +930,7 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         if not isinstance(href, str) or not href.strip():
             continue
         href = href.strip()
-        link_parsed = urlparse(urljoin(url, href))
+        link_parsed = urlparse(urljoin(base_url, href))
         if link_parsed.scheme not in ("http", "https"):
             continue  # not a web navigation (mailto:, javascript:, #anchor…)
         if page_origin is None:
