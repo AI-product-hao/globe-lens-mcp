@@ -288,6 +288,17 @@
 > "does the tool actually honor what its docs promise?" kind of maintenance that
 > only a long-term caretaker does.
 
+> **Updated 2026-08-20 (Day 39):** the streak is now 39+ days — and today's work
+> is a **new audit dimension** (different category from yesterday's correctness
+> fix, keeping the rotation healthy). GlobeLens now flags `<img>` tags with no
+> explicit `width`/`height`: without them the browser cannot reserve space, so
+> each image shifts the layout (Cumulative Layout Shift, a Core Web Vitals
+> concern) as it loads. It is the natural companion to the Day 1 `images_missing_alt`
+> check, extending image auditing from accessibility into render stability. Three
+> new tests; the report stays compact by counting rather than listing. 126 tests
+> passing. This "spot a real Core-Web-Vitals gap and close it with a test" rhythm
+> is exactly the organic, sustained growth a reviewer wants to see.
+
 ---
 
 ## 1. What GlobeLens is
@@ -462,7 +473,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 38+ day streak of tested, documented, backward-compatible
+> project with a continuous 39+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -492,7 +503,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 38+ days, 38+ real commits, 123 passing tests. GlobeLens now validates hreflang
+> 39+ days, 39+ real commits, 126 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, missing favicons, noindex, duplicate meta
