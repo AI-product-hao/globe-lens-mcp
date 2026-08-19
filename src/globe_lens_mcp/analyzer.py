@@ -115,6 +115,7 @@ FIX_HINTS: dict[str, str] = {
     "h1_missing": "Add exactly one <h1> heading describing the page's main topic.",
     "h1_multiple": "Keep a single <h1> and demote the others to <h2>/<h3>.",
     "images_missing_alt": 'Add a descriptive alt="..." to each listed <img> (use alt="" only for purely decorative images).',
+    "images_missing_dims": 'Add width="..." height="..." (or set aspect-ratio in CSS) to each listed <img> so the browser reserves space and avoids layout shift (CLS) as images load.',
     "mixed_content": "Change each listed http:// subresource URL to https:// (or a relative/protocol-relative path).",
     "broken_anchors": "For each listed anchor, add the missing id to the target element or update the href to an existing id.",
     "thin_content": "Add substantive body text (aim for 300+ words) covering the page's topic in depth.",
@@ -249,6 +250,13 @@ class AuditReport:
     h1_count: int = 0
     images_total: int = 0
     images_missing_alt: int = 0
+    # Number of <img> tags with no explicit `width` / `height` attribute.
+    # Without them the browser cannot reserve space, so every image shifts the
+    # page layout (Cumulative Layout Shift) as it streams in — a Core Web
+    # Vitals concern that hurts perceived stability and, on image-heavy pages,
+    # real search rankings. Reported (info, cheap fix) so an agent can pre-empt
+    # the shift alongside accessibility work.
+    images_missing_dims: int = 0
     broken_anchors: list[dict[str, str]] = field(default_factory=list)
     # External <a target="_blank"> links that open a new tab without
     # rel="noopener noreferrer": they leak window.opener (reverse tabnabbing)
@@ -796,17 +804,26 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
         report.issues.append(Issue("warning", "h1_multiple",
                                     f"Found {report.h1_count} <h1> tags; use a single <h1> for clear document structure."))
 
-    # --- on-page media: image alt text ---
+    # --- on-page media: image alt text + layout stability ---
     imgs = soup.find_all("img")
     report.images_total = len(imgs)
     report.images_missing_alt = sum(
         1 for img in imgs if not (img.get("alt") and str(img.get("alt")).strip())
+    )
+    report.images_missing_dims = sum(
+        1 for img in imgs if not img.get("width") and not img.get("height")
     )
     if report.images_total > 0 and report.images_missing_alt > 0:
         report.issues.append(Issue(
             "warning", "images_missing_alt",
             f"{report.images_missing_alt} of {report.images_total} <img> tags missing alt text "
             f"(hurts accessibility and image SEO)."))
+    if report.images_total > 0 and report.images_missing_dims > 0:
+        report.issues.append(Issue(
+            "info", "images_missing_dims",
+            f"{report.images_missing_dims} of {report.images_total} <img> tags have no explicit "
+            f"width/height; without them the browser cannot reserve space, causing layout shift "
+            f"(CLS) as images load."))
 
     # --- insecure subresources: mixed content on HTTPS pages ---
     # Browsers block/flag plaintext HTTP resources loaded from an HTTPS page;

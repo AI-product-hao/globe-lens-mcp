@@ -65,6 +65,56 @@ def test_flags_onpage_structure_issues():
     assert r.images_total == 3
     assert r.images_missing_alt == 2
     assert "images_missing_alt" in codes
+    # none of the three <img> tags declare width/height -> flagged for CLS
+    assert r.images_missing_dims == 3
+    assert "images_missing_dims" in codes
+
+
+# --- <img> missing explicit width/height (layout shift / CLS) ---
+# A browser cannot reserve space for an image with no dimensions, so the page
+# jumps as each image streams in (Cumulative Layout Shift) — a Core Web Vitals
+# concern on image-heavy pages. GlobeLens flags the *count*, not every tag, so
+# the report stays compact regardless of how many images a page has.
+SAMPLE_IMG_DIMS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Image Dimensions Demo</title></head>
+<body><h1>Hi</h1>
+  <img src="/a.png" alt="ok">
+  <img src="/b.png" width="320" height="240" alt="ok">
+  <img src="/c.png" alt="ok">
+</body></html>"""
+
+
+def test_flags_images_missing_width_height():
+    r = analyze_html(SAMPLE_IMG_DIMS, "https://example.com")
+    # 3 images, only one (b) has explicit dimensions -> two flagged
+    assert r.images_total == 3
+    assert r.images_missing_dims == 2
+    issue = next(i for i in r.issues if i.code == "images_missing_dims")
+    assert issue.severity == "info"  # cheap fix, not a broken page
+    assert issue.fix and "width" in issue.fix.lower() and "height" in issue.fix.lower()
+
+
+def test_accepts_images_with_explicit_dimensions():
+    # every <img> carries width/height -> no CLS issue, even with many images
+    html = (
+        '<html lang="en"><head><meta charset="utf-8"><title>Good Images Demo</title></head>'
+        '<body><h1>Hi</h1>'
+        '<img src="/a.png" width="100" height="50" alt="ok">'
+        '<img src="/b.png" width="200" height="100" alt="ok">'
+        "</body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert r.images_total == 2
+    assert r.images_missing_dims == 0
+    assert "images_missing_dims" not in [i.code for i in r.issues]
+
+
+def test_accepts_page_without_images():
+    # a text-only page has no images to size -> the check is N/A, never flagged
+    r = analyze_html(SAMPLE_SINGLE_H1_NO_IMG, "https://example.com")
+    assert r.images_total == 0
+    assert r.images_missing_dims == 0
+    assert "images_missing_dims" not in [i.code for i in r.issues]
 
 
 SAMPLE_SINGLE_H1_NO_IMG = """<!doctype html>
