@@ -50,7 +50,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   severity** — each issue carries a numeric `priority` field (`error` > `warning`
   > `info`) **and an actionable `fix` hint** (a concrete remedy such as the
   exact tag to add), so the agent can apply the most urgent fix first without
-  researching the rule.
+  researching the rule. The report also carries a top-level `issue_counts`
+  breakdown (`{"error": n, "warning": n, "info": n}`) so a caller can gauge the
+  page's health — or gate a CI check on warning/error volume — without walking
+  the full `issues` list.
 - 🌐 **i18n focus** (`check_i18n`): html `lang`, `hreflang` alternates, `x-default`,
   and **hreflang value validation** — malformed codes like `en_US` (underscore
   instead of hyphen) or `english` are flagged, since search engines silently
