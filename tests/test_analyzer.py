@@ -1232,6 +1232,35 @@ def test_issue_order_is_deterministic_within_a_severity_tier():
     assert [i.code for i in again.issues] == [i.code for i in r.issues]
 
 
+def test_issue_counts_breakdown_matches_issues():
+    # issue_counts is the pre-aggregated severity tally of `issues`. A caller
+    # (agent / CI / dashboard) relies on it to gauge health without scanning
+    # the whole list, so it must always equal the per-severity count of the
+    # issues actually produced — a future edit that adds an issue but forgets
+    # to keep the breakdown in sync would be caught here.
+    for sample, url in (
+        (SAMPLE_WORST_CASE, "https://example.com/p"),
+        (SAMPLE_GOOD, "https://example.com"),
+        (SAMPLE_BAD, "https://example.com"),
+    ):
+        r = analyze_html(sample, url)
+        expected = {"error": 0, "warning": 0, "info": 0}
+        for i in r.issues:
+            expected[i.severity] += 1
+        assert r.issue_counts == expected, (sample, r.issue_counts, expected)
+        assert sum(r.issue_counts.values()) == len(r.issues)
+    # the breakdown always carries all three keys (never absent, even when zero)
+    assert set(r.issue_counts) == {"error", "warning", "info"}
+
+
+def test_empty_html_report_carries_issue_counts():
+    # The empty-HTML fast path also populates the breakdown, so callers get a
+    # complete, uniform shape even on degenerate input (one error, no warning/info).
+    r = analyze_html("   ", "https://example.com")
+    assert r.issue_counts == {"error": 1, "warning": 0, "info": 0}
+    assert r.score == 0
+
+
 def test_report_is_json_serializable_for_mcp_transport():
     # Every report crosses an MCP boundary as JSON. A field holding a set, a
     # BeautifulSoup Tag or any other non-JSON value would only blow up at

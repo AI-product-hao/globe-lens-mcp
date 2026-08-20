@@ -220,6 +220,24 @@ def sort_issues(issues: list[Issue]) -> list[Issue]:
     return sorted(issues, key=lambda i: (-i.priority, i.code))
 
 
+def tally_issues(issues: list[Issue]) -> dict[str, int]:
+    """Count issues by severity.
+
+    Returns a complete ``{"error": n, "warning": n, "info": n}`` breakdown,
+    always with all three keys present (zero-filled). A caller — an agent, a
+    CI gate or a dashboard — can read the page's health at a glance from this
+    summary without iterating the (potentially long) ``issues`` list, and can
+    write rules like "fail when warning_count > N" without re-parsing every
+    item. It is the same data the report already carries, just pre-aggregated,
+    so the two can never drift apart.
+    """
+    counts = {"error": 0, "warning": 0, "info": 0}
+    for issue in issues:
+        if issue.severity in counts:
+            counts[issue.severity] += 1
+    return counts
+
+
 @dataclass
 class AuditReport:
     url: str
@@ -297,6 +315,15 @@ class AuditReport:
     has_sitemap: bool | None = None
     score: int = 0
     issues: list[Issue] = field(default_factory=list)
+    # Severity breakdown of `issues`, pre-aggregated so a caller (agent / CI /
+    # dashboard) can gauge the page's health at a glance without walking the
+    # whole list — e.g. a CI gate "warnings > N → fail". Always present with all
+    # three keys (zero-filled), even on a flawless page, and kept in sync with
+    # `issues` by analyze_html (via `tally_issues`). Complements the
+    # server-level `error_count` used by the CI-audit flow.
+    issue_counts: dict[str, int] = field(
+        default_factory=lambda: {"error": 0, "warning": 0, "info": 0}
+    )
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -399,6 +426,7 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             "Received empty or whitespace-only HTML; nothing to audit."))
         report.score = 0
         report.issues = sort_issues(report.issues)
+        report.issue_counts = tally_issues(report.issues)
         return report
 
     soup = BeautifulSoup(html, "html.parser")
@@ -1005,6 +1033,7 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
     # Return issues ordered by severity so callers (and AI agents) see the
     # highest-priority fixes first — the tool's "prioritized issues" promise.
     report.issues = sort_issues(report.issues)
+    report.issue_counts = tally_issues(report.issues)
     return report
 
 
