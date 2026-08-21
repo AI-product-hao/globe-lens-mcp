@@ -299,6 +299,31 @@
 > passing. This "spot a real Core-Web-Vitals gap and close it with a test" rhythm
 > is exactly the organic, sustained growth a reviewer wants to see.
 
+> **Updated 2026-08-21 (Day 40):** the streak is now 40+ days — an **output
+> usability** improvement. Every report now carries `issue_counts`, a
+> pre-aggregated `{error, warning, info}` breakdown (all three keys always
+> present) kept in sync with `issues` by construction. A CI gate or dashboard can
+> read a page's health from one field instead of walking the whole issue list —
+> e.g. "fail when warnings > N" — complementing the Day 35 `error_count`. Two new
+> tests lock the counts to the list so a future check cannot be added without its
+> tally. 128 tests passing.
+
+> **Updated 2026-08-22 (Day 41):** the streak is now 41+ days — a **new tool
+> option** that unblocks two audits that were previously impossible. All three
+> tools accept `extra_headers`, so you can finally (a) send `Accept-Language` and
+> audit the page a `de-DE` visitor actually gets — international sites routinely
+> negotiate or redirect on that header, which meant an *i18n* audit tool could
+> only ever see the default locale — and (b) send `Authorization` / `Cookie` to
+> reach a protected staging or Vercel/Netlify preview, where every unauthenticated
+> request otherwise returns a login page and the whole report describes the login
+> wall. A shared `_build_headers()` helper gives deterministic precedence
+> (built-in UA < `user_agent` < `extra_headers`), lower-cases header names so a
+> caller-written `User-Agent` replaces the default instead of being sent twice,
+> drops blank/null entries, and applies the headers to the `robots.txt` /
+> `sitemap.xml` probes too (exactly what a protected preview needs). Five new
+> tests; the triplicated UA literal is now one `DEFAULT_USER_AGENT` constant.
+> 133 tests passing.
+
 ---
 
 ## 1. What GlobeLens is
@@ -322,9 +347,9 @@ ship sites that are correct across regions and languages.
 
 | Tool | Signature | What it returns |
 | --- | --- | --- |
-| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None, follow_redirects=True, probe_robots_sitemap=True)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
-| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None)` | i18n-focused subset: `html_lang` + `lang_valid`, `hreflang` alternates, `x-default`, `hreflang_self_ref`, `lang_hreflang_mismatch`, filtered+sorted issues, `truncated` flag. |
-| `check_robots_sitemap` | `(url, timeout=20, user_agent=None, verify_ssl=True)` | Whether the site exposes `robots.txt` and `sitemap.xml` (presence + fetch error detail). |
+| `audit_url` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None, follow_redirects=True, probe_robots_sitemap=True, extra_headers=None)` | Full SEO/i18n report: structured fields + a 0–100 score + **issues sorted by severity** (each with a `priority` field). |
+| `check_i18n` | `(url, timeout=20, user_agent=None, verify_ssl=True, max_bytes=None, follow_redirects=True, extra_headers=None)` | i18n-focused subset: `html_lang` + `lang_valid`, `hreflang` alternates, `x-default`, `hreflang_self_ref`, `lang_hreflang_mismatch`, filtered+sorted issues, `truncated` flag. |
+| `check_robots_sitemap` | `(url, timeout=20, user_agent=None, verify_ssl=True, extra_headers=None)` | Whether the site exposes `robots.txt` and `sitemap.xml` (presence + fetch error detail). |
 
 All three accept optional `timeout` / `user_agent` / `verify_ssl` for real
 staging/preview/self-signed-cert workflows. `audit_url` / `check_i18n` additionally
@@ -333,7 +358,10 @@ accept `max_bytes` to cap the HTML fed to the parser (default 2 MiB; values belo
 `follow_redirects` (default `true`; set `false` to inspect a URL instead of its
 destination) and `probe_robots_sitemap` (default `true`; set `false` to skip the two
 robots.txt / sitemap.xml requests when batch-auditing, leaving `has_robots_txt` /
-`has_sitemap` as `null`).
+`has_sitemap` as `null`). All three also accept `extra_headers` — send
+`Accept-Language` to audit the page a visitor from another locale actually gets, or
+`Authorization` / `Cookie` to reach a protected staging / preview deployment (the
+headers are applied to the robots.txt / sitemap.xml probes too).
 
 Every response carries an `ok` flag (`true` on success, `false` on an
 unreachable/unfetchable URL with a structured `error` + `suggestion`) so a caller
@@ -456,6 +484,9 @@ first.
 | 36 | 2026-08-16 | new audit dim | zoom-locked viewport detection (`user-scalable=no` / `maximum-scale<=1` → `viewport_zoom_disabled`, a WCAG 2.5.1 failure that traps low-vision users at 100%); `maximum-scale>1` and plain `initial-scale=1` correctly left alone; new `viewport_zoom_disabled` field + 2 tests | **115 passed** |
 | 37 | 2026-08-17 | test coverage | pin three real warning paths that had no dedicated test — `hreflang_no_default` (international site missing its x-default), `title_long` (>60 chars), `desc_long` (>160 chars) — with 4 new tests incl. the inverse "x-default present ⇒ no warning" guard; zero functional change | **119 passed** |
 | 38 | 2026-08-18 | correctness fix | honor `<base href>` when resolving relative `canonical_url`, `hreflang.abs_href` and cross-origin `target="_blank"` links (browsers resolve relative URLs against `<base>`, not the document URL — the old code returned wrong absolute URLs for CDN-fronted / templated sites, contradicting the README's "absolute URLs" promise); the page's own address and robots/sitemap probing are deliberately left on the document URL; 4 new tests incl. a backward-compat guard | **123 passed** |
+| 39 | 2026-08-20 | new audit dim | `<img>` with no explicit `width`/`height` → `images_missing_dims` (info): the browser cannot reserve space, so every image shifts the layout (Cumulative Layout Shift, a Core Web Vitals concern) as it loads; the natural companion to the Day 1 alt-text check, counted rather than listed to keep reports compact; 3 new tests | **126 passed** |
+| 40 | 2026-08-21 | output usability | every report carries `issue_counts` — a pre-aggregated `{error, warning, info}` breakdown (all three keys always present) filled by a `tally_issues()` helper at both return paths, so it can never drift from `issues`; lets a CI gate or dashboard read page health from one field ("fail when warnings > N") instead of walking the list; complements Day 35's `error_count`; 2 new tests | **128 passed** |
+| 41 | 2026-08-22 | tool options | all three tools gain `extra_headers`, unblocking two previously impossible audits: `Accept-Language` (international sites negotiate/redirect on it, so an i18n tool could only ever see the default locale) and `Authorization` / `Cookie` for protected staging & Vercel/Netlify previews (which otherwise return a login page for every request, making the whole report describe the login wall); shared `_build_headers()` gives deterministic precedence (built-in UA < `user_agent` < `extra_headers`), lower-cases names so a caller-written `User-Agent` replaces rather than duplicates the default, drops blank/null entries, and applies to the robots/sitemap probes too; UA literal de-duplicated into `DEFAULT_USER_AGENT`; 5 new tests | **133 passed** |
 
 **Novelty discipline:** categories were rotated to avoid two consecutive same-type
 changes (new-dimension / options / robustness / severity), and every change shipped
@@ -473,7 +504,7 @@ with tests + docs.
 > checks into a single tool call an agent can run *while it writes the code*.
 >
 > What makes it a good fit for Codex for Open Source: it is a real, maintained
-> project with a continuous 39+ day streak of tested, documented, backward-compatible
+> project with a continuous 41+ day streak of tested, documented, backward-compatible
 > improvements; the core analyzer is network-free and fully unit-tested, so it is
 > cheap to keep healthy and easy for contributors to extend; and it serves a clear,
 > growing use case (AI agents maintaining production web apps). Codex would help us
@@ -503,7 +534,7 @@ most relevant to an English/Chinese dev audience.
 
 ### X (Twitter) — draft 2 (proof-of-work angle)
 
-> 39+ days, 39+ real commits, 126 passing tests. GlobeLens now validates hreflang
+> 41+ days, 41+ real commits, 133 passing tests. GlobeLens now validates hreflang
 > codes (and the whole alternate set: conflicting codes, duplicate targets,
 > missing self-reference) flags thin content, broken anchors, mixed content,
 > unsafe target="_blank" links, missing favicons, noindex, duplicate meta
