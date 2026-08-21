@@ -29,6 +29,34 @@ MAX_HTML_BYTES = 2 * 1024 * 1024
 # to keep the tool call usable.
 MIN_HTML_BYTES = 1024
 
+# Identifies GlobeLens to the sites it audits (and gives operators a link to
+# look up if they see it in their logs). Callers can override it per call via
+# the `user_agent` tool parameter.
+DEFAULT_USER_AGENT = "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
+
+
+def _build_headers(
+    user_agent: str | None = None,
+    extra_headers: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Assemble the request headers for one tool call.
+
+    Precedence, lowest to highest: the built-in GlobeLens User-Agent, the
+    `user_agent` parameter, then `extra_headers` — an explicitly written header
+    always wins, including a `User-Agent` supplied that way.
+
+    Header names are lower-cased before merging, so a caller writing
+    ``{"User-Agent": ...}`` replaces the default instead of sending the header
+    twice. Entries with a blank name or a null value are dropped rather than
+    put on the wire as a malformed header.
+    """
+    headers = {"user-agent": user_agent or DEFAULT_USER_AGENT}
+    for name, value in (extra_headers or {}).items():
+        if not isinstance(name, str) or not name.strip() or value is None:
+            continue
+        headers[name.strip().lower()] = str(value)
+    return headers
+
 
 def _effective_max_bytes(max_bytes: int | None) -> int:
     """Resolve the per-call HTML size cap: default when unset, floored else."""
@@ -258,6 +286,7 @@ async def audit_url(
     max_bytes: int | None = None,
     follow_redirects: bool = True,
     probe_robots_sitemap: bool = True,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict:
     """Audit a public URL for SEO & internationalization readiness.
 
@@ -293,6 +322,16 @@ async def audit_url(
             where you only need the on-page report, or to avoid rate-limiting
             the host. When skipped, has_robots_txt and has_sitemap come back as
             null ("not checked") rather than true/false.
+        extra_headers: Additional request headers, e.g.
+            {"Accept-Language": "de-DE"} to audit the page a German visitor
+            actually gets (many sites negotiate locale or redirect on this
+            header, so without it you can only ever see one language), or
+            {"Authorization": "Basic ..."} / {"Cookie": "..."} to reach a
+            password-protected staging or preview deployment. An explicit
+            header wins over `user_agent`; names are case-insensitive. These
+            headers are also sent on the robots.txt / sitemap.xml probes, and
+            are carried along when a redirect is followed — so avoid putting
+            credentials here for a URL that redirects to another host.
 
     A URL that cannot be fetched at all (no scheme, no host, unsupported
     scheme, unparseable) is rejected up front with ok=false, a specific
@@ -301,10 +340,7 @@ async def audit_url(
     bad_url = _url_input_error(url)
     if bad_url:
         return bad_url
-    headers = {
-        "user-agent": user_agent
-        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
-    }
+    headers = _build_headers(user_agent, extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=follow_redirects,
         timeout=timeout,
@@ -389,6 +425,7 @@ async def check_i18n(
     verify_ssl: bool = True,
     max_bytes: int | None = None,
     follow_redirects: bool = True,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict:
     """Focused check of internationalization signals.
 
@@ -412,16 +449,19 @@ async def check_i18n(
             page it forwards to — e.g. to confirm that `/` really redirects to
             `/en/` for an English visitor instead of silently auditing one
             locale. On a 3xx the tool returns status_code + redirect_to.
+        extra_headers: Additional request headers. The one that matters most
+            here is Accept-Language: pair it with follow_redirects=false to
+            prove that `/` sends a `de-DE` visitor to `/de/` and an `fr-FR`
+            visitor to `/fr/`. Also useful to carry an Authorization / Cookie
+            header into a protected staging or preview deployment. An explicit
+            header wins over `user_agent`; names are case-insensitive.
 
     Unfetchable URLs are rejected up front (see audit_url).
     """
     bad_url = _url_input_error(url)
     if bad_url:
         return bad_url
-    headers = {
-        "user-agent": user_agent
-        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
-    }
+    headers = _build_headers(user_agent, extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=follow_redirects,
         timeout=timeout,
@@ -484,6 +524,7 @@ async def check_robots_sitemap(
     timeout: int = 20,
     user_agent: str | None = None,
     verify_ssl: bool = True,
+    extra_headers: dict[str, str] | None = None,
 ) -> dict:
     """Check whether a site exposes robots.txt and sitemap.xml.
 
@@ -503,14 +544,15 @@ async def check_robots_sitemap(
         timeout: Request timeout in seconds (default 20).
         user_agent: Override the default User-Agent.
         verify_ssl: Set False to skip TLS verification (e.g. staging sites).
+        extra_headers: Additional request headers, e.g. an Authorization or
+            Cookie header so the probes can reach a protected staging / preview
+            deployment (otherwise both files come back as the login page). An
+            explicit header wins over `user_agent`; names are case-insensitive.
     """
     bad_url = _url_input_error(url)
     if bad_url:
         return bad_url
-    headers = {
-        "user-agent": user_agent
-        or "GlobeLens/0.1 (+https://github.com/AI-product-hao/globe-lens-mcp)"
-    }
+    headers = _build_headers(user_agent, extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=True,
         timeout=timeout,

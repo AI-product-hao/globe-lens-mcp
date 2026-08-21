@@ -260,13 +260,39 @@ and for matching how real users or crawlers see your pages:
 | `max_bytes` | `2097152` (2 MiB) | Cap on the HTML fed to the parser (`audit_url` / `check_i18n`). Raise it to fully audit heavy SPA pages; lower it to keep audits of huge pages fast. Values below 1 KiB are clamped up, and truncation is always flagged (`page_truncated` / `truncated`). |
 | `follow_redirects` | `true` | Set `false` to inspect the URL *itself* instead of the page it forwards to (`audit_url` / `check_i18n`). |
 | `probe_robots_sitemap` | `true` | Set `false` to skip the two extra `robots.txt` / `sitemap.xml` requests (`audit_url` only). Audit many pages at once, or avoid rate-limiting the host; `has_robots_txt` / `has_sitemap` then come back as `null` ("not checked"). |
+| `extra_headers` | – | Any additional request headers. `Accept-Language` to audit the page a visitor from another locale actually gets; `Authorization` / `Cookie` to reach a password-protected staging or preview deployment. An explicit header wins over `user_agent`, and names are case-insensitive. |
 
 ```json
 { "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
 { "url": "https://heavy-spa.example.com", "max_bytes": 8388608 }
 { "url": "https://example.com/old-page", "follow_redirects": false }
 { "url": "https://example.com", "probe_robots_sitemap": false }
+{ "url": "https://example.com", "extra_headers": { "Accept-Language": "de-DE" } }
 ```
+
+### Auditing another locale, or a protected preview
+
+Two things `extra_headers` unlocks that were previously impossible:
+
+```json
+{ "url": "https://example.com/", "follow_redirects": false,
+  "extra_headers": { "Accept-Language": "de-DE" } }
+```
+
+Sites that negotiate locale (or redirect) on `Accept-Language` otherwise only
+ever show GlobeLens their default language — pair the header with
+`follow_redirects: false` to prove a `de-DE` visitor really lands on `/de/`.
+
+```json
+{ "url": "https://preview-x1y2.vercel.app/",
+  "extra_headers": { "Cookie": "_vercel_jwt=<token>" } }
+```
+
+Preview / basic-auth deployments serve a login page to every unauthenticated
+request, so the whole report (including `robots.txt` / `sitemap.xml`) describes
+the login wall rather than your site. The credentials ride along on those probes
+too. They are also carried through a followed redirect, so don't put secrets
+here for a URL that redirects to another host.
 
 ### Inspecting a redirect instead of following it
 

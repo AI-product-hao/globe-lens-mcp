@@ -851,3 +851,114 @@ def test_audit_url_catches_client_rejected_invalid_url():
     assert result["status_code"] is None
     assert "rejected by the HTTP client" in result["error"]
     assert "html_lang" not in result
+
+
+# --- extra_headers: caller-supplied request headers -------------------------
+# Two real blockers this unlocks:
+#   1. Locale negotiation. Many international sites pick a language (or issue a
+#      redirect) from Accept-Language, so without that header GlobeLens can
+#      only ever audit the one default locale.
+#   2. Protected staging / preview deployments (Vercel / Netlify previews,
+#      basic-auth staging) need an Authorization or Cookie header, or every
+#      request lands on a login page and the whole report is meaningless.
+
+
+def test_build_headers_defaults_and_precedence():
+    # Default: the built-in GlobeLens UA and nothing else.
+    assert server._build_headers() == {"user-agent": server.DEFAULT_USER_AGENT}
+    # `user_agent` overrides the default.
+    assert server._build_headers("Bot/1.0")["user-agent"] == "Bot/1.0"
+    # extra_headers are merged in...
+    merged = server._build_headers(
+        "Bot/1.0", {"Accept-Language": "de-DE", "Authorization": "Basic xyz"}
+    )
+    assert merged["accept-language"] == "de-DE"
+    assert merged["authorization"] == "Basic xyz"
+    assert merged["user-agent"] == "Bot/1.0"
+    # ...and an explicitly written UA wins over the `user_agent` parameter,
+    # case-insensitively, without sending the header twice.
+    explicit = server._build_headers("Bot/1.0", {"User-Agent": "Explicit/9"})
+    assert explicit["user-agent"] == "Explicit/9"
+    assert len(explicit) == 1
+
+
+def test_build_headers_drops_unusable_entries():
+    # A blank name or a null value cannot go on the wire as a valid header;
+    # dropping beats sending something malformed (or crashing on str(None)).
+    headers = server._build_headers(
+        None, {"": "x", "   ": "y", "X-Skip": None, "X-Keep": "1"}
+    )
+    assert headers == {
+        "user-agent": server.DEFAULT_USER_AGENT,
+        "x-keep": "1",
+    }
+
+
+def test_audit_url_forwards_extra_headers_to_page_and_probes():
+    seen: dict[str, dict[str, str | None]] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen[request.url.path] = {
+            "lang": request.headers.get("accept-language"),
+            "auth": request.headers.get("authorization"),
+            "ua": request.headers.get("user-agent"),
+        }
+        return httpx.Response(200, text=SAMPLE)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/de/",
+            extra_headers={"Accept-Language": "de-DE", "Authorization": "Basic xyz"},
+        ))
+
+    assert result["ok"] is True
+    assert seen["/de/"]["lang"] == "de-DE"
+    assert seen["/de/"]["auth"] == "Basic xyz"
+    # The built-in UA still identifies GlobeLens when only other headers are set.
+    assert seen["/de/"]["ua"] == server.DEFAULT_USER_AGENT
+    # A protected staging site needs the same credentials on these two probes,
+    # or they come back as the login page and are reported as "missing".
+    assert seen["/robots.txt"]["auth"] == "Basic xyz"
+    assert seen["/sitemap.xml"]["auth"] == "Basic xyz"
+
+
+def test_check_i18n_forwards_accept_language():
+    captured: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["lang"] = request.headers.get("accept-language")
+        return httpx.Response(200, text=SAMPLE)
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_i18n(
+            "https://example.com", extra_headers={"accept-language": "fr-FR"}
+        ))
+
+    assert captured["lang"] == "fr-FR"
+    assert result["ok"] is True
+
+
+def test_check_robots_sitemap_forwards_extra_headers():
+    seen: list[str | None] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.headers.get("cookie"))
+        return httpx.Response(200, text="User-agent: *\nAllow: /",
+                              headers={"content-type": "text/plain"})
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(transport=httpx.MockTransport(handler), **_fwd_kwargs(kwargs))
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.check_robots_sitemap(
+            "https://preview.example.com", extra_headers={"Cookie": "_vercel_jwt=tok"}
+        ))
+
+    assert result["ok"] is True
+    assert seen == ["_vercel_jwt=tok", "_vercel_jwt=tok"]  # both probes
