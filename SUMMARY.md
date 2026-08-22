@@ -324,6 +324,8 @@
 > tests; the triplicated UA literal is now one `DEFAULT_USER_AGENT` constant.
 > 133 tests passing.
 
+> **Updated 2026-08-23 (Day 42):** the streak is now 42+ days — a **false-negative fix in the Open Graph audit**. Previously the OG check only tested *key presence* (`"og:title" in og_tags`), so a tag a CMS/plugin emitted as `<meta property="og:title" content="">` slipped through as "fine" and a broken social card shipped unnoticed. GlobeLens now treats empty content as absent for the presence check and separately flags genuinely empty tags as `og_empty` (warning, with the offending keys listed and a fix hint), while still firing `og_missing` (info) for truly absent tags. New `og_empty` report field + 3 tests; the existing 133-suite stays green at 136. This "declared-but-broken is still a defect" discipline is exactly what a careful reviewer looks for.
+
 ---
 
 ## 1. What GlobeLens is

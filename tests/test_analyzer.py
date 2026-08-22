@@ -499,6 +499,57 @@ def test_flags_missing_og_tags():
     assert "og_missing" in [i.code for i in r.issues]
 
 
+# --- declared-but-empty Open Graph tags (false-negative elimination) ---
+# A CMS or plugin can emit `<meta property="og:title" content="">`. The old check
+# only tested key *presence*, so an empty value was approved as "fine" and a
+# broken social card shipped to production unnoticed. Now it is flagged.
+SAMPLE_OG_EMPTY_TITLE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Empty OG Demo</title>
+<meta property="og:title" content="">
+<meta property="og:description" content="real description text">
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_OG_BOTH_EMPTY = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Both OG Empty Demo</title>
+<meta property="og:title" content="">
+<meta property="og:description" content="   ">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_og_title_declared_but_empty():
+    # og:title is present but blank -> og_empty (warning), not og_missing
+    r = analyze_html(SAMPLE_OG_EMPTY_TITLE, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "og_empty" in codes
+    assert "og_missing" not in codes
+    # only the genuinely empty key is listed; the valid og:description is excluded
+    assert r.og_empty == ["og:title"]
+    issue = next(i for i in r.issues if i.code == "og_empty")
+    assert issue.severity == "warning"
+    assert issue.fix and "og:title" in issue.fix.lower()
+
+
+def test_flags_all_empty_og_tags_and_lists_each_key():
+    # both og:title and og:description blank -> each key reported, og_missing quiet
+    r = analyze_html(SAMPLE_OG_BOTH_EMPTY, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "og_empty" in codes
+    assert "og_missing" not in codes
+    assert set(r.og_empty) == {"og:title", "og:description"}
+
+
+def test_present_nonempty_og_is_not_flagged():
+    # the original happy path is untouched: real values -> no og_empty, no og_missing
+    r = analyze_html(SAMPLE_SOCIAL, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "og_empty" not in codes
+    assert "og_missing" not in codes
+    assert r.og_empty == []
+
+
+
 # --- favicon / browser-tab icon presence ---
 # A missing favicon is a common, cheap-to-fix gap that hurts brand recognition in
 # tabs, bookmarks and search-result snippets. We flag its *absence* (info), not

@@ -125,6 +125,7 @@ FIX_HINTS: dict[str, str] = {
     "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
     "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
     "favicon_missing": 'Add <link rel="icon" href="/favicon.ico"> (and an apple-touch-icon for iOS) to <head> so the page shows a brand icon in tabs, bookmarks and search results.',
+    "og_empty": 'Fill in a non-empty content value for the listed Open Graph tag(s), e.g. <meta property="og:title" content="Page title">; an empty value is ignored by social platforms and your share preview falls back unpredictably.',
 }
 
 # <meta http-equiv="refresh" content="..."> payloads seen in the wild:
@@ -311,6 +312,14 @@ class AuditReport:
     hreflang_duplicate_urls: list[dict[str, Any]] = field(default_factory=list)
     og_tags: dict[str, str] = field(default_factory=dict)
     twitter_tags: dict[str, str] = field(default_factory=dict)
+    # Open Graph tags that are *declared but empty* (e.g. a CMS/plugin emitted
+    # `<meta property="og:title" content="">`). These are a distinct defect from
+    # a missing tag: the author intended to set a social title and produced a
+    # broken one, so social platforms ignore the value and fall back
+    # unpredictably. We surface them separately from `og_missing` so a present-
+    # but-blank tag is not silently approved (the old check only tested key
+    # presence, so an empty value slipped through as "fine").
+    og_empty: list[str] = field(default_factory=list)
     has_robots_txt: bool | None = None
     has_sitemap: bool | None = None
     score: int = 0
@@ -745,8 +754,33 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                         f"({', '.join(sorted(self_langs))}); browsers and search "
                         f"engines will infer different languages for this page."))
 
-    if "og:title" not in report.og_tags or "og:description" not in report.og_tags:
-        report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
+    # --- Open Graph presence (and the empty-value false negative) ---
+    # A social preview needs both og:title and og:description. A *missing* tag is
+    # an info-level gap; a tag that is *declared but empty* (`content=""`) is a
+    # distinct, more specific defect — the author tried to set a title and
+    # produced a broken one. The old check only tested key presence
+    # (`"og:title" in og_tags`), so an empty value slipped through as "fine".
+    # We now treat empty content as absent for the presence check, and separately
+    # flag genuinely empty tags so a broken social card is never approved.
+    og_title_raw = report.og_tags.get("og:title")
+    og_desc_raw = report.og_tags.get("og:description")
+    og_title_ok = bool(og_title_raw and og_title_raw.strip())
+    og_desc_ok = bool(og_desc_raw and og_desc_raw.strip())
+    if not og_title_ok or not og_desc_ok:
+        empty_keys = [
+            key for key, ok in (("og:title", og_title_ok), ("og:description", og_desc_ok))
+            if not ok and key in report.og_tags
+        ]
+        if empty_keys:
+            # declared-but-empty: a real broken tag, not a mere omission
+            report.og_empty = empty_keys
+            report.issues.append(Issue(
+                "warning", "og_empty",
+                f"Open Graph tag(s) declared but empty ({', '.join(empty_keys)}); "
+                f"social platforms ignore the empty value and your share preview "
+                f"falls back unpredictably."))
+        else:
+            report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
 
     # --- favicon / browser-tab icon presence ---
     # A missing favicon weakens brand recognition in browser tabs, bookmarks and
