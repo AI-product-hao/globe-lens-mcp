@@ -20,7 +20,9 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   canonical, viewport (including a **zoom-locked viewport** check —
   `user-scalable=no` / `maximum-scale<=1` is a WCAG 2.5.1 failure that traps
   low-vision users at 100%), charset, Open Graph / Twitter cards (**declared-but-empty
-  OG tags are flagged as `og_empty`, not just absent ones**), **H1 structure**
+  OG tags are flagged as `og_empty`, not just absent ones**; a **partially
+  configured card missing `og:image`** — the most-forgotten OG tag — is flagged
+  separately as `og_image_missing` so text-only shares are not shipped), **H1 structure**
   (missing / multiple), **image `alt` text coverage**, **`<img>` missing
   explicit `width`/`height`** (a Cumulative Layout Shift / Core Web Vitals
   concern — without sized images the page jumps as they load), **`meta robots` / noindex**
