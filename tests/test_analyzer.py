@@ -13,6 +13,7 @@ SAMPLE_GOOD = """<!doctype html>
   <link rel="icon" href="/favicon.ico">
   <meta property="og:title" content="Example">
   <meta property="og:description" content="desc">
+  <meta property="og:image" content="https://example.com/og.png">
   <script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","name":"Example"}</script>
 </head>
 <body><h1>Hi</h1></body>
@@ -547,6 +548,49 @@ def test_present_nonempty_og_is_not_flagged():
     assert "og_empty" not in codes
     assert "og_missing" not in codes
     assert r.og_empty == []
+
+
+# --- og:image presence (social thumbnail) ---
+# A social card with og:title / og:description but no og:image ships a text-only
+# share that is clicked far less often — and forgetting the image is the single
+# most common OG mistake. GlobeLens flags it as a distinct, low-severity signal.
+SAMPLE_OG_NO_IMAGE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>OG Without Image Demo Page</title>
+<meta property="og:title" content="Example">
+<meta property="og:description" content="A description for the share card.">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_missing_og_image_when_card_partially_configured():
+    # og:title + og:description present, no og:image -> the share thumbnail is
+    # missing; this is a distinct defect from og_missing (no OG at all).
+    r = analyze_html(SAMPLE_OG_NO_IMAGE, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "og_image_missing" in codes
+    assert r.og_image_missing is True
+    # it must NOT also fire og_missing / og_empty (the card is real, just image-less)
+    assert "og_missing" not in codes
+    assert "og_empty" not in codes
+    issue = next(i for i in r.issues if i.code == "og_image_missing")
+    assert issue.severity == "info"  # a missed thumbnail, not a broken page
+    assert issue.fix and "og:image" in issue.fix.lower()
+
+
+def test_does_not_flag_og_image_in_three_situations():
+    # 1) no OG at all -> og_missing (not og_image_missing)
+    r_none = analyze_html(SAMPLE_BAD, "https://example.com")
+    assert "og_missing" in [i.code for i in r_none.issues]
+    assert "og_image_missing" not in [i.code for i in r_none.issues]
+    assert r_none.og_image_missing is False
+    # 2) a full card with og:image -> nothing OG-related fires
+    r_full = analyze_html(SAMPLE_SOCIAL, "https://example.com")
+    assert "og_image_missing" not in [i.code for i in r_full.issues]
+    assert r_full.og_image_missing is False
+    # 3) SAMPLE_GOOD declares og:image -> the canonical "good" sample stays clean
+    r_good = analyze_html(SAMPLE_GOOD, "https://example.com")
+    assert "og_image_missing" not in [i.code for i in r_good.issues]
+    assert r_good.og_image_missing is False
 
 
 

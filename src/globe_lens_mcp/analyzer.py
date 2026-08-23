@@ -126,6 +126,7 @@ FIX_HINTS: dict[str, str] = {
     "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
     "favicon_missing": 'Add <link rel="icon" href="/favicon.ico"> (and an apple-touch-icon for iOS) to <head> so the page shows a brand icon in tabs, bookmarks and search results.',
     "og_empty": 'Fill in a non-empty content value for the listed Open Graph tag(s), e.g. <meta property="og:title" content="Page title">; an empty value is ignored by social platforms and your share preview falls back unpredictably.',
+    "og_image_missing": 'Add <meta property="og:image" content="https://.../social-card.png"> (1200x630 works best across platforms) so shared links show a thumbnail; a text-only preview is clicked far less often.',
 }
 
 # <meta http-equiv="refresh" content="..."> payloads seen in the wild:
@@ -320,6 +321,14 @@ class AuditReport:
     # but-blank tag is not silently approved (the old check only tested key
     # presence, so an empty value slipped through as "fine").
     og_empty: list[str] = field(default_factory=list)
+    # False = an Open Graph social card is partially configured (og:title and/or
+    # og:description present with a real value) but og:image is absent; True =
+    # the share thumbnail is missing. A share without a thumbnail is far less
+    # likely to be clicked, yet og:image is the single most commonly forgotten
+    # OG tag. None is never used: when no OG is declared at all we raise
+    # og_missing instead, and when the title/description are merely empty we
+    # raise og_empty instead, leaving this False in both cases.
+    og_image_missing: bool = False
     has_robots_txt: bool | None = None
     has_sitemap: bool | None = None
     score: int = 0
@@ -781,6 +790,23 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 f"falls back unpredictably."))
         else:
             report.issues.append(Issue("info", "og_missing", "Missing Open Graph tags; weak social sharing preview."))
+
+    # --- Open Graph image presence (social thumbnail) ---
+    # og:image is the most impactful OG tag for click-through: a share without a
+    # thumbnail is text-only and gets far fewer clicks. Yet it is the single
+    # most commonly forgotten one — teams set og:title + og:description and ship
+    # without the image. We only flag it when a social card is *partially*
+    # configured (at least one of og:title / og:description carries a real value)
+    # but og:image is absent, so a page with no OG at all keeps firing og_missing
+    # (not this), and a page whose title/description are merely empty keeps
+    # firing og_empty (not this). That keeps the signal tight and avoids nagging
+    # twice about a half-broken card.
+    if (og_title_ok or og_desc_ok) and "og:image" not in report.og_tags:
+        report.og_image_missing = True
+        report.issues.append(Issue(
+            "info", "og_image_missing",
+            "Open Graph tags present (og:title / og:description) but og:image "
+            "is missing; shared links will show no thumbnail, hurting click-through."))
 
     # --- favicon / browser-tab icon presence ---
     # A missing favicon weakens brand recognition in browser tabs, bookmarks and
