@@ -1729,3 +1729,72 @@ def test_base_href_changes_cross_origin_blank_link_resolution():
     assert len(r.unsafe_blank_links) == 1
     assert r.unsafe_blank_links[0]["href"] == "phish"
 
+
+# ---------------------------------------------------------------------------
+# Coverage hardening: the <meta name="robots"> parser and the <title> presence
+# check are signals an AI agent reads to decide whether a page is indexable and
+# whether it has a real title. Both had only one-direction coverage (noindex
+# present, real title present). These pin the *other* direction so a refactor
+# cannot silently start flagging healthy pages, or start ignoring uppercase
+# directives the spec says are equivalent.
+# ---------------------------------------------------------------------------
+
+SAMPLE_ROBOTS_INDEXABLE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Indexable Page Demo</title>
+<meta name="robots" content="index, follow">
+<meta name="description" content="A reasonably long and well written description for the page so no desc warning fires here at all.">
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_ROBOTS_UPPER = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Uppercase Robots Demo</title>
+<meta name="robots" content="NOINDEX, NOFOLLOW">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_records_meta_robots_without_false_noindex():
+    # A page that is deliberately indexable still declares a robots meta; the
+    # analyzer must record that value (agents read it) yet NOT fire
+    # `robots_noindex` — flagging a healthy, intended-to-be-indexed page as
+    # "excluded from search" would be a damaging false positive an AI agent
+    # would act on.
+    r = analyze_html(SAMPLE_ROBOTS_INDEXABLE, "https://example.com")
+    assert r.meta_robots == "index, follow"
+    codes = [i.code for i in r.issues]
+    assert "robots_noindex" not in codes
+    # a non-noindex directive is captured verbatim, including extra tokens an
+    # agent might inspect (e.g. max-image-preview, nosnippet)
+    assert r.meta_robots == "index, follow"
+
+
+def test_detects_uppercase_noindex_in_meta_robots():
+    # Per the HTML spec, directive values are case-insensitive, so "NOINDEX"
+    # must be treated exactly like "noindex". Without this lock a change that
+    # compared case-sensitively would let uppercase directives slip through and
+    # an unintentionally-excluded page would be reported as indexable.
+    r = analyze_html(SAMPLE_ROBOTS_UPPER, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "robots_noindex" in codes
+    assert r.meta_robots == "NOINDEX, NOFOLLOW"
+
+
+SAMPLE_TITLE_WHITESPACE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>   </title>
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_whitespace_only_title_is_treated_as_missing():
+    # `<title>   </title>` is not a usable page title (search engines show the
+    # URL or a snippet instead). It must be reported as `title_missing`, not as
+    # a real — but empty — title that would downgrade the defect to the harmless
+    # "title is short" warning. The leading/trailing-stripped emptiness is the
+    # exact condition the analyzer checks, so this guards it both ways.
+    r = analyze_html(SAMPLE_TITLE_WHITESPACE, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "title_missing" in codes
+    assert "title_short" not in codes
+    assert r.title is None
+    assert r.title_length == 0
+
