@@ -1,0 +1,55 @@
+name: Deployment Notification
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Feishu Notification
+        env:
+          FEISHU_WEBHOOK: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          MESSAGE: ${{ github.event.head_commit.message }}
+          STATUS: ${{ job.status }}
+        run: |
+          python3 - <<'PYEOF'
+          import os, json, urllib.request
+
+          status = os.environ.get("STATUS", "")
+          if status == "success":
+              emoji, title = "\u2705", "\u90e8\u7f72\u6210\u529f"
+          else:
+              emoji, title = "\u274c", "\u90e8\u7f72\u5931\u8d25"
+
+          repo = os.environ.get("REPO", "")
+          branch = os.environ.get("BRANCH", "")
+          actor = os.environ.get("ACTOR", "")
+          msg = os.environ.get("MESSAGE", "")
+          details = "https://github.com/" + repo + "/actions"
+
+          text = (emoji + " " + title + "\n\n"
+                  "\u4ed3\u5e93: " + repo + "\n"
+                  "\u5206\u652f: " + branch + "\n"
+                  "\u89e6\u53d1\u8005: " + actor + "\n"
+                  "\u63d0\u4ea4\u4fe1\u606f: " + msg + "\n\n"
+                  "\u67e5\u770b\u8be6\u60c5: " + details)
+
+          payload = json.dumps(
+              {"msg_type": "text", "content": {"text": text}},
+              ensure_ascii=False,
+          ).encode("utf-8")
+
+          req = urllib.request.Request(
+              os.environ["FEISHU_WEBHOOK"],
+              data=payload,
+              headers={"Content-Type": "application/json"},
+          )
+          with urllib.request.urlopen(req) as resp:
+              print("\u98de\u4e66\u54cd\u5e94:", resp.read().decode("utf-8"))
+          PYEOF
