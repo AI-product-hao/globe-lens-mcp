@@ -1798,3 +1798,44 @@ def test_whitespace_only_title_is_treated_as_missing():
     assert r.title is None
     assert r.title_length == 0
 
+
+# --- duplicate <title> detection --------------------------------------------
+# A document may only have one <title>; browsers use the first and silently drop
+# any further one. Two titles almost always signal a templating bug (a partial
+# that re-includes the document title), so the author's intended title may not be
+# the one that ends up in the tab / SERP. This is a tight, high-signal authoring
+# defect — it never fires on a correctly built page.
+SAMPLE_DUP_TITLE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Real Page Title</title>
+<title>Accidental Duplicate Title</title>
+</head><body><h1>Hi</h1></body></html>"""
+
+SAMPLE_INLINE_SVG_TITLE = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>Real Page Title</title>
+<svg><title>Close menu</title></svg>
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_duplicate_title():
+    r = analyze_html(SAMPLE_DUP_TITLE, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "title_duplicate" in codes
+    dup = next(i for i in r.issues if i.code == "title_duplicate")
+    assert dup.severity == "warning"
+    assert dup.fix and "one" in dup.fix.lower()
+    # the first title is still the one reported, not the duplicate
+    assert r.title == "Real Page Title"
+
+
+def test_single_title_with_inline_svg_label_is_not_duplicate():
+    # An inline <svg><title> is an accessible name for the icon, NOT a document
+    # title; it must not be counted as a second <title> (otherwise every page
+    # with an icon label would be falsely flagged). Only real <title> elements
+    # count, so a single document title + an svg label => no duplicate warning.
+    r = analyze_html(SAMPLE_INLINE_SVG_TITLE, "https://example.com")
+    assert "title_duplicate" not in [i.code for i in r.issues]
+    assert r.title == "Real Page Title"
+
+

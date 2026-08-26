@@ -23,7 +23,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   OG tags are flagged as `og_empty`, not just absent ones**; a **partially
   configured card missing `og:image`** — the most-forgotten OG tag — is flagged
   separately as `og_image_missing` so text-only shares are not shipped), **H1 structure**
-  (missing / multiple), **image `alt` text coverage**, **`<img>` missing
+  (missing / multiple), **image `alt` text coverage**, **duplicate `<title>`
+  detection** (a second `<title>` in the document is invalid HTML that browsers
+  silently drop — usually a templating bug that ships the wrong title to the tab
+  and search results), **`<img>` missing
   explicit `width`/`height`** (a Cumulative Layout Shift / Core Web Vitals
   concern — without sized images the page jumps as they load), **`meta robots` / noindex**
   crawl control, **JSON-LD structured data** presence, **mixed-content detection**

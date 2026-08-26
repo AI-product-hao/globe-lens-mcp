@@ -93,6 +93,7 @@ FIX_HINTS: dict[str, str] = {
     "title_missing": "Add <title>Your page title</title> inside <head>; aim for 30-60 characters.",
     "title_short": "Expand the <title> to 30-60 characters including your primary keyword.",
     "title_long": "Shorten the <title> to 60 characters or less so it is not cut off in search results.",
+    "title_duplicate": "Keep exactly one <title> element in <head>; browsers only use the first, so the extra title(s) are silently ignored (a duplicated title is almost always a templating bug).",
     "desc_missing": 'Add <meta name="description" content="..."> with a 70-160 character summary.',
     "desc_short": "Expand the meta description to 70-160 characters to improve snippet quality.",
     "desc_long": "Trim the meta description to 160 characters or less to avoid SERP truncation.",
@@ -464,6 +465,23 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                                         f"Title is long ({report.title_length} chars); keep <= 60 for SERP."))
     else:
         report.issues.append(Issue("error", "title_missing", "Missing or empty <title> tag."))
+
+    # --- duplicate <title> elements ---
+    # Only the *first* <title> in <head> is used by browsers, search engines and
+    # social scrapers; any further <title> is silently dropped. Two titles almost
+    # always mean a templating bug (a partial that re-includes the document
+    # title), so the page's real title may not be the one the author intended —
+    # a tight, high-signal authoring defect. Inline SVG/MathML <title> labels are
+    # not document titles (handled by _page_title_tag) and must not count here.
+    real_title_tags = [
+        t for t in soup.find_all("title")
+        if not any(parent.name in _FOREIGN_TITLE_PARENTS for parent in t.parents)
+    ]
+    if len(real_title_tags) > 1:
+        report.issues.append(Issue(
+            "warning", "title_duplicate",
+            f"Found {len(real_title_tags)} <title> tags in the document; browsers "
+            f"only use the first, so the extra title(s) are ignored."))
 
     # --- meta description ---
     meta_descs = soup.find_all("meta", attrs={"name": lambda v: v and v.lower() == "description"})
