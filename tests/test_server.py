@@ -218,6 +218,31 @@ def test_audit_url_clamps_max_bytes_to_floor():
     assert result["title"] == "Options Test"
 
 
+def test_audit_url_surfaces_truncated_flag():
+    # audit_url returns report.to_dict(), which used to DROP the truncation
+    # boolean — only check_i18n exposed it. A CI gate reading the audit_url
+    # response therefore couldn't tell a partial audit from a complete one. The
+    # `truncated` field must now reach the audit_url response too.
+    filler = b"<p>word </p>" * 4000  # ~48 KB, exceeds the 2 KiB cap below
+    body = (
+        b'<html lang="en"><head><meta charset="utf-8">'
+        b"<title>Big-ish</title></head><body><h1>x</h1>" + filler
+        + b"</body></html>"
+    )
+
+    def make_client(*args, **kwargs):
+        return REAL_CLIENT(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, content=body)),
+            **_fwd_kwargs(kwargs),
+        )
+
+    with patch.object(server.httpx, "AsyncClient", side_effect=make_client):
+        result = asyncio.run(server.audit_url("https://example.com", max_bytes=2048))
+
+    assert result["truncated"] is True
+    assert "page_truncated" in [i["code"] for i in result["issues"]]
+
+
 def test_check_i18n_respects_custom_max_bytes():
     body = b'<html lang="en"><head><meta charset="utf-8"><title>T</title></head>' \
            b"<body>" + b"<p>word</p>" * 4000 + b"</body></html>"

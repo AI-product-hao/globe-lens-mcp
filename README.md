@@ -246,6 +246,12 @@ if not res["ok"] or res["error_count"] > 0:
     raise SystemExit(f"SEO/i18n gate failed: {res['error_count']} error(s)")
 ```
 
+Every response also carries a `truncated` boolean that is `true` when the page
+exceeded the size cap and only its first part was analyzed. If your gate needs a
+fully complete audit (e.g. on a known-huge page), treat `truncated` as a warning
+or raise `max_bytes` — otherwise you may be green-lighting issues that live
+below the cut-off point.
+
 Because every issue also carries a `priority` and a copy-paste `fix`, the agent
 can both **enforce** the gate *and* **apply** the fix in the same run — the
 audit → fix → re-audit loop above, automated. `check_i18n` exposes the same

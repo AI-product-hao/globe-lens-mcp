@@ -1839,3 +1839,20 @@ def test_single_title_with_inline_svg_label_is_not_duplicate():
     assert r.title == "Real Page Title"
 
 
+def test_truncated_flag_reflected_in_report_and_issue():
+    # The `truncated` boolean must travel with the report (not only as the
+    # page_truncated issue), so a caller can read audit completeness from a
+    # stable key without scanning the issues list — and it survives the
+    # empty-HTML short-circuit so it is truthful on every path.
+    html = ('<html lang="en"><head><meta charset="utf-8">'
+            '<title>T</title></head><body><h1>x</h1></body></html>')
+
+    r = analyze_html(html, "https://example.com", truncated=True)
+    assert r.truncated is True
+    assert "page_truncated" in [i.code for i in r.issues]
+
+    r_full = analyze_html(html, "https://example.com", truncated=False)
+    assert r_full.truncated is False
+    assert "page_truncated" not in [i.code for i in r_full.issues]
+
+

@@ -244,6 +244,14 @@ def tally_issues(issues: list[Issue]) -> dict[str, int]:
 @dataclass
 class AuditReport:
     url: str
+    # True when the source HTML was cut off before analysis (e.g. an oversized
+    # page beyond the per-call max_bytes). Carried as a first-class boolean —
+    # not just the `page_truncated` issue — so a caller (CI gate, dashboard,
+    # agent) can read "was this audit complete?" from a stable key without
+    # scanning the issues list, and `to_dict()` exposes it uniformly across
+    # every tool (audit_url / check_i18n / check_robots_sitemap) and the
+    # analyzer alone.
+    truncated: bool = False
     title: str | None = None
     title_length: int = 0
     meta_description: str | None = None
@@ -435,6 +443,11 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             knows the result may be incomplete.
     """
     report = AuditReport(url=url)
+    # Record the input completeness up front so it survives every return path
+    # (including the empty-HTML short-circuit below), keeping the field a
+    # reliable "was this audit complete?" signal regardless of how the body was
+    # obtained.
+    report.truncated = truncated
 
     # Guard against degenerate input (None / empty / whitespace-only) so the
     # analyzer never crashes on a bad upstream response and returns a clear,
