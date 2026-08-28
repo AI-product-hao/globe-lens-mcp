@@ -122,6 +122,8 @@ FIX_HINTS: dict[str, str] = {
     "thin_content": "Add substantive body text (aim for 300+ words) covering the page's topic in depth.",
     "page_truncated": "Re-audit critical sections separately, or reduce the page size (the audit only covers the first part).",
     "canonical_conflict": "Keep a single canonical link pointing to one URL; remove the duplicates or make them all agree on the same address.",
+    "canonical_cross_domain": 'Confirm the cross-domain canonical is intentional; an unintended one (a CMS default, a staging box, or a copied <head>) tells search engines this page is actually the other site, which can get it dropped or merged.',
+
     "meta_refresh_redirect": 'Replace the <meta http-equiv="refresh"> tag with a real server-side redirect (301 for permanent, 302 for temporary).',
     "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
     "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
@@ -178,6 +180,21 @@ def _primary_subtag(code: str | None) -> str:
     if not code:
         return ""
     return code.strip().split("-", 1)[0].lower()
+
+
+def _host_without_www(netloc: str) -> str:
+    """Lowercase host with a leading ``www.`` removed, for cross-domain compares.
+
+    ``www.example.com`` and ``example.com`` are the same site, so a canonical
+    check that treated them as different would false-positive on the single
+    most common host-variant. Stripping the optional leading ``www.`` (and
+    lowercasing) collapses that case while still catching a *genuinely*
+    different registered host.
+    """
+    host = netloc.lower()
+    if host.startswith("www."):
+        host = host[4:]
+    return host
 
 
 def _self_ref_key(u: str) -> tuple[str, str, str, str]:
@@ -657,6 +674,27 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
                 "Multiple canonical links point to different URLs "
                 f"({', '.join(resolved)}); search engines ignore conflicting "
                 f"canonical signals, so pick a single URL."))
+
+        # Cross-domain canonical: pointing the canonical at a *different*
+        # registered host is only valid when done on purpose to consolidate
+        # ranking onto another property. An *unintended* one — a CMS default
+        # left at the vendor's domain, a staging box pointing at prod, or a
+        # copy of another site's <head> — silently tells search engines "this
+        # page is actually that other page", which can get the real page
+        # dropped or merged with the wrong site. We surface it (warning) so an
+        # agent/author can confirm it was deliberate. www vs non-www is the
+        # same site, so we ignore that host variant to avoid false positives.
+        page_host = _host_without_www(urlparse(url).netloc)
+        canon_host = (
+            _host_without_www(urlparse(report.canonical_url).netloc)
+            if report.canonical_url else ""
+        )
+        if page_host and canon_host and page_host != canon_host:
+            report.issues.append(Issue(
+                "warning", "canonical_cross_domain",
+                f"Canonical URL points to a different domain "
+                f"({report.canonical_url}); an unintended cross-domain canonical "
+                f"makes search engines treat this page as the other site's."))
 
     for meta in soup.find_all("meta"):
         prop = meta.get("property") or meta.get("name")

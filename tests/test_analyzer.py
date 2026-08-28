@@ -201,6 +201,42 @@ def test_ignores_duplicate_canonical_to_same_url():
     assert r.canonical_urls == ["https://example.com/"]
 
 
+# --- cross-domain canonical (a different registered host in rel=canonical) ---
+SAMPLE_CANON_CROSS_DOMAIN = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Cross Domain Canonical</title>
+<link rel="canonical" href="https://vendor-cms.example.net/page">
+</head><body><h1>Hi</h1></body></html>"""
+
+
+def test_flags_cross_domain_canonical():
+    # An unintended cross-domain canonical tells search engines this page IS
+    # the other site; it must be surfaced (warning) and must not crash.
+    r = analyze_html(SAMPLE_CANON_CROSS_DOMAIN, "https://mysite.com")
+    codes = [i.code for i in r.issues]
+    assert "canonical_cross_domain" in codes
+    issue = next(i for i in r.issues if i.code == "canonical_cross_domain")
+    assert issue.severity == "warning"
+    assert issue.fix and "cross-domain" in issue.fix.lower()
+
+
+def test_ignores_www_variant_canonical():
+    # www.example.com vs example.com is the same site; this must NOT fire.
+    html = (
+        '<html lang="en"><head><meta charset="utf-8"><title>WWW Variant</title>'
+        '<link rel="canonical" href="https://www.example.com/">'
+        "</head><body><h1>Hi</h1></body></html>"
+    )
+    r = analyze_html(html, "https://example.com")
+    assert "canonical_cross_domain" not in [i.code for i in r.issues]
+
+
+def test_ignores_same_domain_relative_canonical():
+    # A relative canonical resolves to the same host -> never a cross-domain hit
+    # (this also guards the www-strip against tripping on an empty variant).
+    r = analyze_html(SAMPLE_RELATIVE, "https://example.com/some/deep/page")
+    assert "canonical_cross_domain" not in [i.code for i in r.issues]
+
+
 SAMPLE_RELATIVE = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <title>Relative Links Demo</title>
