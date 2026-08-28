@@ -47,7 +47,10 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   `canonical` detection** (multiple
   `rel="canonical"` links pointing to *different* URLs — which makes search
   engines ignore the canonical signal entirely; duplicate links resolving to the
-  same address are not flagged), **`meta refresh` detection**
+  same address are not flagged), **cross-domain `canonical` detection** (a
+  `rel="canonical"` pointing at a *different* registered host — an unintended
+  one makes search engines treat your page as the other site; `www` vs
+  non-`www` is correctly treated as the same site), **`meta refresh` detection**
   (`<meta http-equiv="refresh" content="0; url=…">` is a client-side redirect
   that should be a real 301 — it is reported with the target resolved to an
   absolute URL, while a *targetless* timed self-reload is flagged separately as
