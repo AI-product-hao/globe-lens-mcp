@@ -35,7 +35,11 @@ attributes, canonical/robots/sitemap, and clean meta/OG tags.
   links** (`href="#frag"` pointing to a missing target), **unsafe external
   `target="_blank"` links** (cross-origin links that open a new tab without
   `rel="noopener noreferrer"` — reverse-tabnabbing / Lighthouse "unsafe
-  links"), **thin-content
+  links"), **links with no discernible text** (a link that points at a real
+  destination but carries no visible text, image `alt`, or `aria-label` —
+  invisible to screen-reader and keyboard users, a genuine WCAG 2.4.4 / 4.1.2
+  defect that icon-only buttons and auto-generated "read more" wrappers ship
+  routinely), **thin-content
   detection** (body word count below a healthy threshold, script/style
   boilerplate excluded, and **script-aware**: Chinese, Japanese and Thai text
   has no spaces, so it is measured by character count instead of being scored

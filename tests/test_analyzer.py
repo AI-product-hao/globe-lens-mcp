@@ -1213,6 +1213,54 @@ def test_only_unprotected_cross_origin_blank_links_flagged():
     assert r.unsafe_blank_links[0]["href"] == "https://other.com/x"
 
 
+SAMPLE_NO_TEXT_LINKS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>No Text Links</title></head>
+<body>
+  <a href="https://example.com/about"></a>
+  <a href="/products"><i class="icon"></i></a>
+  <a href="https://other.com/x" target="_blank"></a>
+</body></html>"""
+
+
+def test_flags_links_with_no_discernible_text():
+    # A link that points somewhere but carries no accessible name is invisible
+    # to screen-reader / keyboard users (WCAG 2.4.4 / 4.1.2). Icon-only wrappers
+    # and auto-generated "read more" links routinely ship this defect, so it is
+    # worth surfacing. The real destination is recorded so the agent can fix it.
+    r = analyze_html(SAMPLE_NO_TEXT_LINKS, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "link_no_text" in codes
+    assert len(r.links_no_text) == 3
+    hrefs = {e["href"] for e in r.links_no_text}
+    assert "https://example.com/about" in hrefs
+    assert "/products" in hrefs
+
+
+SAMPLE_NAMED_LINKS = """<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Named Links</title></head>
+<body>
+  <a href="/home">Home</a>
+  <a href="/docs" aria-label="Documentation"></a>
+  <a href="/help" title="Get help"></a>
+  <a href="/img"><img alt="Logo" src="/l.png"></a>
+  <a href="/icon"><svg><title>Settings</title></svg></a>
+  <a href="#top"></a>
+  <a href="mailto:x@e.com"></a>
+  <a href="javascript:void(0)"></a>
+</body></html>"""
+
+
+def test_ignores_links_that_have_an_accessible_name():
+    # Anything that already gives the link a name must NOT be flagged: visible
+    # text, an aria-label, a title, a descendant img alt, or an SVG <title>.
+    # In-page anchors (#frag) and javascript:/mailto: links carry their own
+    # context and are excluded by design — so the audit stays free of noise.
+    r = analyze_html(SAMPLE_NAMED_LINKS, "https://example.com")
+    codes = [i.code for i in r.issues]
+    assert "link_no_text" not in codes
+    assert r.links_no_text == []
+
+
 # ---------------------------------------------------------------------------
 # Coverage hardening: behaviours that already work but were never asserted
 # directly. Each of these is a path a refactor could silently break without a

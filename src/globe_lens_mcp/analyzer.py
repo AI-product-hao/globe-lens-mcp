@@ -127,6 +127,7 @@ FIX_HINTS: dict[str, str] = {
     "meta_refresh_redirect": 'Replace the <meta http-equiv="refresh"> tag with a real server-side redirect (301 for permanent, 302 for temporary).',
     "meta_refresh_reload": 'Remove the timed <meta http-equiv="refresh">; refresh the data with JavaScript instead and give users a way to pause or extend it.',
     "unsafe_blank_link": 'Add rel="noopener noreferrer" to every external <a target="_blank"> link (or drop target="_blank"); otherwise the opened page can hijack window.opener.',
+    "link_no_text": 'Give the link visible text, or an aria-label/title, or an <img alt="...">, so screen-reader and keyboard users can tell where it goes (WCAG 2.4.4 / 4.1.2).',
     "favicon_missing": 'Add <link rel="icon" href="/favicon.ico"> (and an apple-touch-icon for iOS) to <head> so the page shows a brand icon in tabs, bookmarks and search results.',
     "og_empty": 'Fill in a non-empty content value for the listed Open Graph tag(s), e.g. <meta property="og:title" content="Page title">; an empty value is ignored by social platforms and your share preview falls back unpredictably.',
     "og_image_missing": 'Add <meta property="og:image" content="https://.../social-card.png"> (1200x630 works best across platforms) so shared links show a thumbnail; a text-only preview is clicked far less often.',
@@ -308,6 +309,12 @@ class AuditReport:
     # rel="noopener noreferrer": they leak window.opener (reverse tabnabbing)
     # and waste resources. Each entry carries the raw href and visible text.
     unsafe_blank_links: list[dict[str, str]] = field(default_factory=list)
+    # Links that point somewhere but carry no accessible name: no visible text,
+    # no image alt, no aria-label/title. Screen-reader and keyboard users get no
+    # clue where they go (WCAG 2.4.4 / 4.1.2); some assistive tech skip them
+    # entirely. Purely positional anchors (href="#…") are intentionally not
+    # listed here — their job is to jump, not to be labelled.
+    links_no_text: list[dict[str, str]] = field(default_factory=list)
     mixed_content: list[dict[str, str]] = field(default_factory=list)
     meta_robots: str | None = None
     # Raw content of <meta http-equiv="refresh"> when present, plus its parsed
@@ -1124,6 +1131,55 @@ def analyze_html(html: str, url: str, truncated: bool = False) -> AuditReport:
             f"Found {len(report.unsafe_blank_links)} external target=\"_blank\" "
             f"link(s) without rel=\"noopener noreferrer\"; they expose "
             f"window.opener (reverse tabnabbing) and waste resources."))
+
+    # --- links with no discernible text (accessibility) ---
+    # A link that points at a real destination but has no accessible name — no
+    # visible text, no `<img alt>`, no `aria-label`, no `title` — is invisible to
+    # screen-reader and keyboard users: they hear "link" with no destination clue,
+    # and some assistive technology skips it outright (WCAG 2.4.4 / 4.1.2). It is
+    # a genuine, common defect: icon-only buttons and auto-generated "read more"
+    # wrappers routinely ship `<a href="..."></a>`. We deliberately exclude
+    # in-page anchors (`#frag`) — their purpose is positional, not labelled — and
+    # `javascript:`/`mailto:`/`tel:` links, which carry their own context. An
+    # aria-label, a non-empty title, descendant image alt text, or an SVG
+    # `<title>` all supply an accessible name, so such links are left alone.
+    for a in soup.find_all("a"):
+        href = a.get("href")
+        if not isinstance(href, str) or not href.strip():
+            continue
+        href = href.strip()
+        if href.startswith("#"):
+            continue  # in-page anchor: positional, not a labelling gap
+        if href.lower().startswith(("javascript:", "mailto:", "tel:")):
+            continue  # these carry inherent context
+        if a.get("aria-label") and str(a.get("aria-label")).strip():
+            continue  # explicit accessible name
+        if a.get("title") and str(a.get("title")).strip():
+            continue  # title supplies an accessible name
+        has_name = bool((a.get_text() or "").strip())
+        if not has_name:
+            has_name = any(
+                (img.get("alt") and str(img.get("alt")).strip())
+                for img in a.find_all("img")
+            )
+        if not has_name:
+            has_name = any(
+                (t.get_text() and t.get_text().strip())
+                for svg in a.find_all("svg")
+                for t in svg.find_all("title")
+            )
+        if has_name:
+            continue
+        report.links_no_text.append({
+            "href": href[:200],
+            "text": (a.get_text() or "").strip()[:80],
+        })
+    if report.links_no_text:
+        report.issues.append(Issue(
+            "info", "link_no_text",
+            f"Found {len(report.links_no_text)} link(s) with no discernible "
+            f"text; screen-reader and keyboard users cannot tell where they go "
+            f"(WCAG 2.4.4 / 4.1.2)."))
 
     # --- content depth: thin-content / body word count ---
     # Search engines treat pages with very little original text as low-value
