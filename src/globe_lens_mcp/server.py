@@ -280,6 +280,7 @@ def _redirect_stop_result(url: str, resp: httpx.Response) -> dict:
 @mcp.tool()
 async def audit_url(
     url: str,
+    html: str | None = None,
     timeout: int = 20,
     user_agent: str | None = None,
     verify_ssl: bool = True,
@@ -302,7 +303,14 @@ async def audit_url(
     which page was analyzed.
 
     Args:
-        url: The page to audit.
+        url: The page to audit. Also used as the base URL for resolving
+            relative canonical / hreflang links. Required even when `html` is
+            supplied (so the analyzer can compute absolute URLs).
+        html: Optional raw HTML body to audit directly. When provided, the
+            page is analyzed from this string with no network request — ideal
+            for CI (audit a built file from disk, no server / port needed) or
+            for auditing markup an agent already holds. robots.txt /
+            sitemap.xml are not probed in this mode.
         timeout: Request timeout in seconds (default 20).
         user_agent: Override the default User-Agent (e.g. to mimic a real
             browser or a specific crawler).
@@ -340,6 +348,31 @@ async def audit_url(
     bad_url = _url_input_error(url)
     if bad_url:
         return bad_url
+    # When a ready-made HTML body is supplied, audit it directly instead of
+    # fetching the URL. This powers two real, network-free workflows that the
+    # fetch path cannot serve cleanly:
+    #   * CI: audit a freshly built page from disk with no server to hit and no
+    #     port to expose (read the built file, hand it here).
+    #   * An agent that already holds the markup (it just wrote the file, or
+    #     read it from disk) and wants to audit it in place.
+    # No HTTP client is opened, so robots.txt / sitemap.xml are not probed
+    # (reported as null = "not checked"). The url is still validated above
+    # because it is the base used to resolve relative canonical / hreflang.
+    if html is not None:
+        final_url = url
+        report = analyze_html(html, final_url)
+        out = report.to_dict()
+        out["url"] = url  # what the caller asked for, kept for traceability
+        out["final_url"] = final_url
+        out["redirected"] = False
+        out["followed_redirects"] = False
+        out["has_robots_txt"] = None
+        out["has_sitemap"] = None
+        out["ok"] = True
+        out["error_count"] = sum(
+            1 for i in report.issues if i.severity == "error"
+        )
+        return out
     headers = _build_headers(user_agent, extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=follow_redirects,
@@ -420,6 +453,7 @@ async def audit_url(
 @mcp.tool()
 async def check_i18n(
     url: str,
+    html: str | None = None,
     timeout: int = 20,
     user_agent: str | None = None,
     verify_ssl: bool = True,
@@ -438,7 +472,11 @@ async def check_i18n(
     without the full-page score diluting it with unrelated info warnings.
 
     Args:
-        url: The page to check.
+        url: The page to check. Also the base URL for resolving relative
+            hreflang links. Required even when `html` is supplied.
+        html: Optional raw HTML body to audit directly, with no network request
+            (same CI / local-audit path as audit_url; findings are filtered to
+            the internationalization signals).
         timeout: Request timeout in seconds (default 20).
         user_agent: Override the default User-Agent.
         verify_ssl: Set False to skip TLS verification (e.g. staging sites).
@@ -461,6 +499,33 @@ async def check_i18n(
     bad_url = _url_input_error(url)
     if bad_url:
         return bad_url
+    # Mirror audit_url: a supplied `html` body is audited in place, with no
+    # network request. The i18n signals (lang / hreflang) are all in the markup,
+    # so this is the same no-server CI / local-audit path, just filtered to the
+    # internationalization findings.
+    if html is not None:
+        final_url = url
+        report = analyze_html(html, final_url)
+        issues = [asdict(i) for i in report.issues
+                  if i.code.startswith(("hreflang", "lang"))]
+        return {
+            "url": url,
+            "final_url": final_url,
+            "redirected": False,
+            "followed_redirects": False,
+            "ok": True,
+            "error_count": sum(1 for i in issues if i["severity"] == "error"),
+            "html_lang": report.html_lang,
+            "lang_valid": report.lang_valid,
+            "lang_hreflang_mismatch": report.lang_hreflang_mismatch,
+            "hreflang": report.hreflang,
+            "hreflang_self_ref": report.hreflang_self_ref,
+            "hreflang_conflicts": report.hreflang_conflicts,
+            "hreflang_duplicate_urls": report.hreflang_duplicate_urls,
+            "issues": issues,
+            "score": report.score,
+            "truncated": False,
+        }
     headers = _build_headers(user_agent, extra_headers)
     async with httpx.AsyncClient(
         follow_redirects=follow_redirects,

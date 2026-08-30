@@ -987,3 +987,72 @@ def test_check_robots_sitemap_forwards_extra_headers():
 
     assert result["ok"] is True
     assert seen == ["_vercel_jwt=tok", "_vercel_jwt=tok"]  # both probes
+
+
+# ---------------------------------------------------------------------------
+# html body supplied: audit markup in place, with NO network request.
+# ---------------------------------------------------------------------------
+
+LOCAL_HTML = (
+    '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    "<title>Built Locally</title>"
+    '<link rel="canonical" href="/en/">'
+    "</head><body><h1>Hi</h1></body></html>"
+)
+
+LOCAL_HTML_NO_LANG = (
+    '<!doctype html><html><head><meta charset="utf-8">'
+    "<title>No Lang</title></head><body></body></html>"
+)
+
+
+def test_audit_url_audits_supplied_html_without_opening_a_client():
+    # The html path must short-circuit before any HTTP client is built — proof
+    # it touches no network. _refusing_client raises if AsyncClient is called.
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/index.html", html=LOCAL_HTML
+        ))
+
+    assert result["ok"] is True
+    assert result["html_lang"] == "en"
+    assert result["final_url"] == "https://example.com/index.html"
+    assert result["redirected"] is False
+    assert result["followed_redirects"] is False
+    # No fetch => robots/sitemap not probed (honest "not checked").
+    assert result["has_robots_txt"] is None
+    assert result["has_sitemap"] is None
+    # Relative canonical resolves against the supplied base url.
+    assert result["canonical_url"] == "https://example.com/en/"
+    assert result["error_count"] == 0
+
+
+def test_audit_url_html_path_still_reports_error_count():
+    # Supplying html does not bypass the analyzer: a page with no <html lang>
+    # still raises lang_missing (error) and error_count >= 1.
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.audit_url(
+            "https://example.com/no-lang.html", html=LOCAL_HTML_NO_LANG
+        ))
+
+    assert result["ok"] is True
+    assert result["error_count"] >= 1
+    assert any(i["severity"] == "error" for i in result["issues"])
+    assert result["html_lang"] is None
+
+
+def test_check_i18n_audits_supplied_html_without_opening_a_client():
+    # The i18n tool shares the same no-network path; its filtered findings
+    # (lang validity, hreflang cluster) must still surface from the body.
+    with patch.object(server.httpx, "AsyncClient", side_effect=_refusing_client):
+        result = asyncio.run(server.check_i18n(
+            "https://example.com/de", html=LANG_CONFLICT_PAGE
+        ))
+
+    assert result["ok"] is True
+    assert result["html_lang"] == "english"
+    assert result["lang_valid"] is False
+    assert result["lang_hreflang_mismatch"] is None
+    assert "lang_invalid" in [i["code"] for i in result["issues"]]
+    # every reported issue still ships an actionable fix hint
+    assert all(i["fix"] for i in result["issues"])

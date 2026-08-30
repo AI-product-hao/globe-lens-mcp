@@ -280,6 +280,7 @@ and for matching how real users or crawlers see your pages:
 | `follow_redirects` | `true` | Set `false` to inspect the URL *itself* instead of the page it forwards to (`audit_url` / `check_i18n`). |
 | `probe_robots_sitemap` | `true` | Set `false` to skip the two extra `robots.txt` / `sitemap.xml` requests (`audit_url` only). Audit many pages at once, or avoid rate-limiting the host; `has_robots_txt` / `has_sitemap` then come back as `null` ("not checked"). |
 | `extra_headers` | – | Any additional request headers. `Accept-Language` to audit the page a visitor from another locale actually gets; `Authorization` / `Cookie` to reach a password-protected staging or preview deployment. An explicit header wins over `user_agent`, and names are case-insensitive. |
+| `html` | – | Pass a raw HTML body to audit it **directly, with no network request** (`audit_url` / `check_i18n`). Perfect for CI: read a freshly built page from disk and audit it without standing up a server or exposing a port; also handy when an agent already holds the markup. The `url` is still required (it is the base for resolving relative links). robots.txt / sitemap.xml are not probed in this mode. |
 
 ```json
 { "url": "https://staging.example.com", "verify_ssl": false, "user_agent": "Mozilla/5.0" }
@@ -287,6 +288,7 @@ and for matching how real users or crawlers see your pages:
 { "url": "https://example.com/old-page", "follow_redirects": false }
 { "url": "https://example.com", "probe_robots_sitemap": false }
 { "url": "https://example.com", "extra_headers": { "Accept-Language": "de-DE" } }
+{ "url": "https://example.com/index.html", "html": "<!doctype html><html lang=\"en\">…</html>" }
 ```
 
 ### Auditing another locale, or a protected preview
