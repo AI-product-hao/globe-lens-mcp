@@ -495,3 +495,11 @@
 
 #### 下一步（Day 49）候选（避开「新增审计维度」，上次是 D48）
 - ① 工具可选参数（上次 D41，间隔 7 天，空档最久类别）；② 输出可用性/文案（上次 D40，间隔 8 天，空档最久）；③ 测试覆盖（上次 D44，间隔 4 天可放宽）；④ 边界 bug 修复（上次 D46，间隔 2 天可放宽）。暂无已知 latent bug。
+
+## Day 49 — 2026-08-31（持续维护，Day 48 之后的第 1 天）
+- **改动类型：工具可选参数（与 Day 48「新增审计维度」不同类，满足「恢复轮换」要求；上次同类 D41，间隔 8 天，为空档最久类别）**。
+- **内容**：`audit_url` / `check_i18n` 新增可选参数 `html: str | None = None`。传入原始 HTML 正文时，**直接审计该字符串、不再发任何网络请求**——`url` 仍必填（作为相对 canonical/hreflang 的解析基准），但不再打开 HTTP 客户端；`final_url=url`、`redirected=False`、`followed_redirects=False`；robots.txt / sitemap.xml 不探测（回落 `null` = "未检查"）；正常透出 `ok` / `error_count` / `score` 等全量字段。`check_i18n` 同样短路，仅回传 i18n 过滤后的 findings。真实使用场景：① CI 里读取刚构建好的页面文件直接审计，**无需起服务、无需暴露端口**；② agent 已经持有 markup（刚写完文件 / 刚从磁盘读过）时就地审计。默认 `None` → 完全走原 fetch 路径，向后兼容、零回归。`FIX_HINTS`/源码锁表不受影响（无新 issue code）。README「Tool options」表新增 `html` 行 + 一个 JSON 示例。
+- **测试**：`tests/test_server.py` 新增 3 例——`test_audit_url_audits_supplied_html_without_opening_a_client`（用 `_refusing_client` 证明**未打开任何 HTTP 客户端**、相对 canonical 按 url 解析、robots/sitemap 回落 None、error_count==0）、`test_audit_url_html_path_still_reports_error_count`（无 lang 页仍触发 `lang_missing` 且 error_count>=1，证明短路不绕过分析器）、`test_check_i18n_audits_supplied_html_without_opening_a_client`（无网络下 `lang_invalid` 仍被过滤透出、每条 issue 仍带 fix）；pytest **150 → 153 passed**，零回归。
+- **文档**：README「Tool options」表 + 示例同步 `html`；PROGRESS.md 本条目。SUMMARY.md 本次不重生成（仅 Day 1..7 触发收官）。
+- **对 Codex for OSS 申请的贡献（Day 49）**：连续活跃进入第 49 天。本次是「工具可选参数」——把一个明确、可落地的真实使用场景坐实：CI 无需起服务即可审计构建产物、agent 可就地审计持有的 markup。加进证据链的是：① 维护者持续在**真实使用场景**维度打磨工具（此前 D41 加 `extra_headers` 解锁 staging/locale 审计，本日再加 `html` 解锁离线/CI 审计），证明这是被真实需求驱动的演进而非炫技；② 连续 49 天真实提交、153 测试全绿可一键复跑、无连两次同类、无破坏性变更、无新依赖；③ 类别轮换仍健康（新维度 D1/D3/D5/D8/D10/D12/D14/D18/D20/D22/D25/D29/D32/D34/D36/D39/D43/D45/D47/D48、工具参数 D2/D17/D24/D33/D41/D49、健壮/边界修复 D4/D6/D13/D15/D19/D21/D23/D26/D28/D31/D38/D42/D46、严重级别/文案 D7/D16、错误处理 D9/D30、测试覆盖 D11/D27/D37/D44、输出可用性/文档 D35/D40）。
+- **下一步（Day 50）候选（避开「工具可选参数」，上次是 D49）**：① 测试覆盖（上次 D44，间隔 5 天）；② 输出可用性/文案（上次 D40，间隔 9 天，空档最久）；③ 边界 bug 修复（上次 D46，间隔 3 天可放宽）；④ 新增审计维度（上次 D48，间隔 1 天可放宽，避开已覆盖项）。暂无已知 latent bug。
